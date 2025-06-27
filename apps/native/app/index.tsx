@@ -15,7 +15,7 @@ import {
   Alert,
 } from 'react-native';
 
-export default function TabOne() {
+export default function HomePage() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [connectionStatus, setConnectionStatus] = useState<
     'untested' | 'testing' | 'success' | 'failed'
