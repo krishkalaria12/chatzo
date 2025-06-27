@@ -1,14 +1,29 @@
 import { httpAction } from './_generated/server';
-import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
+import { providerRegistry } from './providers/registry';
+import { getSystemPrompt } from './config/prompts';
 
 // HTTP action for streaming AI chat
 export const chat = httpAction(async (ctx, request) => {
   try {
-    const { messages } = await request.json();
+    const { messages, model: selectedModel } = await request.json();
 
     if (!messages || !Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'Invalid messages format' }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    // Get model configuration using provider registry
+    const modelKey = selectedModel || 'gemini-2.5-flash'; // Default model
+    const modelConfig = providerRegistry.getModelConfig(modelKey);
+
+    if (!modelConfig) {
+      return new Response(JSON.stringify({ error: `Invalid model: ${modelKey}` }), {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
@@ -23,12 +38,26 @@ export const chat = httpAction(async (ctx, request) => {
       content: msg.content,
     }));
 
-    // Initialize Google Generative AI with gemini-2.5-flash-preview-04-17 model
+    // Add system prompt as the first message if not already present
+    const systemPrompt = getSystemPrompt({
+      name: modelConfig.name,
+      id: modelConfig.id,
+      description: modelConfig.description,
+      provider: modelConfig.provider,
+    });
+    const messagesWithSystem =
+      cleanMessages[0]?.role === 'system'
+        ? cleanMessages
+        : [{ role: 'system', content: systemPrompt }, ...cleanMessages];
+
+    // Get model instance from provider registry
+    const modelInstance = providerRegistry.getModelInstance(modelKey);
+
     const result = await streamText({
-      model: google('gemini-2.5-flash-preview-04-17'),
-      messages: cleanMessages,
-      temperature: 0.7,
-      maxTokens: 2000,
+      model: modelInstance,
+      messages: messagesWithSystem,
+      temperature: modelConfig.temperature,
+      maxTokens: modelConfig.maxTokens,
     });
 
     // Return the streaming response with exact headers from official guide
@@ -57,6 +86,31 @@ export const chat = httpAction(async (ctx, request) => {
         },
       }
     );
+  }
+});
+
+// Get available models using provider registry
+export const getModels = httpAction(async (ctx, request) => {
+  try {
+    const models = providerRegistry.getAllModels();
+    const defaultModel = 'gemini-2.5-flash';
+
+    return new Response(JSON.stringify({ models, defaultModel }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  } catch (error) {
+    console.error('Get models error:', error);
+    return new Response(JSON.stringify({ error: 'Failed to fetch models' }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
   }
 });
 

@@ -26,10 +26,14 @@ export default function HomePage() {
   const [connectionStatus, setConnectionStatus] = useState<
     'untested' | 'testing' | 'success' | 'failed'
   >('untested');
+  const [selectedModel, setSelectedModel] = useState<string>('mistral-large');
 
   const { messages, error, handleInputChange, input, handleSubmit, isLoading, append } = useChat({
     fetch: expoFetch as unknown as typeof globalThis.fetch,
     api: generateConvexApiUrl('/api/chat'),
+    body: {
+      model: selectedModel,
+    },
     onError: error => {
       console.error('Chat error:', error);
       Alert.alert('Chat Error', error.message || 'Unknown error occurred');
@@ -41,7 +45,8 @@ export default function HomePage() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: "Hello! I'm your AI assistant powered by Google Gemini. How can I help you today?",
+        content:
+          "# Hello! I'm Chatzo 🚀\n\nYour AI assistant powered by **Google Gemini** and **Mistral AI** models. You can select different models using the selector in the input area below to match your specific needs.\n\nHow can I help you today?",
       },
     ],
   });
@@ -168,61 +173,35 @@ export default function HomePage() {
               <View className='py-4 px-4 border-b border-border bg-background'>
                 <View className='flex-row items-center justify-between mb-2'>
                   <View className='flex-1'>
-                    <Text className='text-2xl font-bold text-black dark:text-white'>
-                      AI Chat Demo
-                    </Text>
+                    <Text className='text-2xl font-bold text-black dark:text-white'>Chatzo</Text>
                   </View>
                   <ThemeToggle />
                 </View>
 
                 <Text className='text-sm text-muted-foreground mb-2'>
-                  Powered by Google Gemini & Convex • Streaming enabled
+                  AI Assistant powered by Google Gemini & Mistral AI • Streaming enabled
                 </Text>
 
                 {/* Connection Test Button */}
-                <TouchableOpacity
-                  onPress={testConnection}
-                  disabled={connectionStatus === 'testing'}
-                  className={`px-3 py-1 rounded-md mb-2 ${
-                    connectionStatus === 'success'
-                      ? 'bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700'
-                      : connectionStatus === 'failed'
-                        ? 'bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-700'
-                        : connectionStatus === 'testing'
-                          ? 'bg-yellow-100 dark:bg-yellow-900 border border-yellow-300 dark:border-yellow-700'
-                          : 'bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600'
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-medium ${
-                      connectionStatus === 'success'
-                        ? 'text-green-700 dark:text-green-300'
-                        : connectionStatus === 'failed'
-                          ? 'text-red-700 dark:text-red-300'
-                          : connectionStatus === 'testing'
-                            ? 'text-yellow-700 dark:text-yellow-300'
-                            : 'text-gray-700 dark:text-gray-300'
-                    }`}
+                <View className='flex-row space-x-2'>
+                  <TouchableOpacity
+                    onPress={testConnection}
+                    className='px-3 py-1 rounded-md bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700'
                   >
-                    {connectionStatus === 'testing'
-                      ? 'Testing Connection...'
-                      : connectionStatus === 'success'
-                        ? '✓ Connection OK'
-                        : connectionStatus === 'failed'
-                          ? '✗ Connection Failed'
-                          : 'Test Convex Connection'}
-                  </Text>
-                </TouchableOpacity>
+                    <Text className='text-xs font-medium text-green-700 dark:text-green-300'>
+                      Test Convex ({connectionStatus})
+                    </Text>
+                  </TouchableOpacity>
 
-                {/* Google AI Test Button */}
-                <TouchableOpacity
-                  onPress={testGoogleAI}
-                  className='px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
-                >
-                  <Text className='text-xs font-medium text-blue-700 dark:text-blue-300'>
-                    Test Google AI (Gemini 2.5)
-                  </Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={testGoogleAI}
+                    className='px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
+                  >
+                    <Text className='text-xs font-medium text-blue-700 dark:text-blue-300'>
+                      Test AI Models
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Messages */}
@@ -284,7 +263,12 @@ export default function HomePage() {
             </View>
 
             {/* Auto Resizing Input */}
-            <AutoResizingInput onSend={handleSendMessage} placeholder='Type your message...' />
+            <AutoResizingInput
+              onSend={handleSendMessage}
+              placeholder='Type your message...'
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+            />
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

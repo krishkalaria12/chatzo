@@ -8,15 +8,20 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/lib/use-color-scheme';
+import { ModelPicker } from './model-picker';
 
 interface AutoResizingInputProps {
   onSend?: (text: string) => void;
   placeholder?: string;
+  selectedModel?: string;
+  onModelChange?: (modelKey: string) => void;
 }
 
 export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   onSend,
   placeholder = 'Type your message...',
+  selectedModel = 'gemini-2.5-flash',
+  onModelChange,
 }) => {
   const [text, setText] = useState('');
   const [inputHeight, setInputHeight] = useState(40);
@@ -45,7 +50,6 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
 
   const handleSend = () => {
     if (text.trim()) {
-      console.log('Sending message:', text.trim());
       onSend?.(text.trim());
       setText('');
       setInputHeight(40);
@@ -85,8 +89,8 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
     inputRef.current?.focus();
   };
 
-  // Container height = input height + padding for icons/buttons
-  const containerHeight = inputHeight + 70; // Reduced padding for better fit
+  // Container height = input height + padding for icons/buttons + model picker
+  const containerHeight = inputHeight + 90; // Reduced height for native picker
 
   // Simple animated styles - only animate scale, not height to avoid conflict with KeyboardAvoidingView
   const animatedContainerStyle = useAnimatedStyle(() => {
@@ -109,6 +113,21 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
         ]}
         className='overflow-hidden rounded-2xl border'
       >
+        {/* Model Selector */}
+        <View className='px-4 py-2 border-b' style={{ borderColor: colors.border }}>
+          <View className='flex-row items-center justify-between'>
+            <Text className='text-xs font-medium' style={{ color: colors.icon }}>
+              Model
+            </Text>
+            <View className='flex-1 ml-3'>
+              <ModelPicker
+                selectedModel={selectedModel}
+                onModelChange={onModelChange || (() => {})}
+              />
+            </View>
+          </View>
+        </View>
+
         {/* Input area */}
         <TouchableOpacity
           activeOpacity={1}
@@ -146,7 +165,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
         </TouchableOpacity>
 
         {/* Bottom section */}
-        <View className='flex-row items-center justify-between px-4 pb-4 pt-2'>
+        <View className='flex-row items-center justify-between px-4 py-2'>
           {/* Icons */}
           <View className='flex-row items-center'>
             <TouchableOpacity className='p-1'>

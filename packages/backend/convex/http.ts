@@ -1,5 +1,5 @@
 import { httpRouter } from 'convex/server';
-import { chat, chatOptions } from './ai';
+import { chat, chatOptions, getModels } from './ai';
 import { testEndpoint, testGoogleAI } from './test';
 
 const http = httpRouter();
@@ -16,6 +16,13 @@ http.route({
   path: '/test-ai',
   method: 'GET',
   handler: testGoogleAI,
+});
+
+// Get available models
+http.route({
+  path: '/api/models',
+  method: 'GET',
+  handler: getModels,
 });
 
 // Handle POST requests to /api/chat

@@ -14,8 +14,14 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as ai from "../ai.js";
+import type * as config_models from "../config/models.js";
+import type * as config_prompts from "../config/prompts.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
+import type * as providers_base from "../providers/base.js";
+import type * as providers_google from "../providers/google.js";
+import type * as providers_mistral from "../providers/mistral.js";
+import type * as providers_registry from "../providers/registry.js";
 import type * as test from "../test.js";
 import type * as todos from "../todos.js";
 
@@ -29,8 +35,14 @@ import type * as todos from "../todos.js";
  */
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  "config/models": typeof config_models;
+  "config/prompts": typeof config_prompts;
   healthCheck: typeof healthCheck;
   http: typeof http;
+  "providers/base": typeof providers_base;
+  "providers/google": typeof providers_google;
+  "providers/mistral": typeof providers_mistral;
+  "providers/registry": typeof providers_registry;
   test: typeof test;
   todos: typeof todos;
 }>;
