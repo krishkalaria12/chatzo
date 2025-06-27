@@ -13,7 +13,10 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as ai from "../ai.js";
 import type * as healthCheck from "../healthCheck.js";
+import type * as http from "../http.js";
+import type * as test from "../test.js";
 import type * as todos from "../todos.js";
 
 /**
@@ -25,7 +28,10 @@ import type * as todos from "../todos.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  ai: typeof ai;
   healthCheck: typeof healthCheck;
+  http: typeof http;
+  test: typeof test;
   todos: typeof todos;
 }>;
 export declare const api: FilterApi<

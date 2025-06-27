@@ -1,3 +1,4 @@
+import "@/polyfills";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import {
