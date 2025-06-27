@@ -7,10 +7,16 @@ dist/
 build/
 .expo/
 .turbo/
+.cache/
 
 # Generated files
 _generated/
 *.d.ts
+packages/backend/convex/_generated/
+
+# Native app specific
+apps/native/.expo/
+apps/native/.cache/
 
 # Logs
 *.log

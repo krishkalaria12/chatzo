@@ -6,16 +6,16 @@ module.exports = {
   printWidth: 100,
   tabWidth: 2,
   useTabs: false,
-  
+
   // JSX specific
   jsxSingleQuote: true,
   jsxBracketSameLine: false,
-  
+
   // Other options
   bracketSpacing: true,
   arrowParens: 'avoid',
   endOfLine: 'auto',
-  
+
   // File-specific overrides
   overrides: [
     {
@@ -32,4 +32,4 @@ module.exports = {
       },
     },
   ],
-}; 
+};

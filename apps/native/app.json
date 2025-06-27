@@ -1,19 +1,15 @@
 {
   "expo": {
-    "name": "my-better-t-app",
-    "slug": "my-better-t-app",
+    "name": "Chatzo",
+    "slug": "chatzo",
     "version": "1.0.0",
-    "scheme": "my-better-t-app",
+    "scheme": "chatzo",
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router",
-      "expo-secure-store",
-      "expo-web-browser"
-    ],
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"],
     "experiments": {
       "typedRoutes": true,
       "tsconfigPaths": true
@@ -27,19 +23,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.amanvarshney01.mybettertapp"
+      "bundleIdentifier": "com.krishkalaria12.chatzo"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.amanvarshney01.mybettertapp",
+      "package": "com.krishkalaria12.chatzo",
       "edgeToEdgeEnabled": true
     }
   }

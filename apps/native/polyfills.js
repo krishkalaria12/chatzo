@@ -3,9 +3,7 @@ import structuredClone from '@ungap/structured-clone';
 
 if (Platform.OS !== 'web') {
   const setupPolyfills = async () => {
-    const { polyfillGlobal } = await import(
-      'react-native/Libraries/Utilities/PolyfillFunctions'
-    );
+    const { polyfillGlobal } = await import('react-native/Libraries/Utilities/PolyfillFunctions');
 
     const { TextEncoderStream, TextDecoderStream } = await import(
       '@stardazed/streams-text-encoding'
@@ -22,4 +20,4 @@ if (Platform.OS !== 'web') {
   setupPolyfills();
 }
 
-export {}; 
+export {};

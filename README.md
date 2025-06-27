@@ -1,6 +1,8 @@
 # Chatzo
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Convex, and more.
+This project was created with
+[Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a
+modern TypeScript stack that combines Convex, and more.
 
 ## Features
 
@@ -24,13 +26,15 @@ pnpm install
 
 ## Convex Setup
 
-This project uses Convex as a backend. You'll need to set up Convex before running the app:
+This project uses Convex as a backend. You'll need to set up Convex before
+running the app:
 
 ```bash
 pnpm dev:setup
 ```
 
-Follow the prompts to create a new Convex project and connect it to your application.
+Follow the prompts to create a new Convex project and connect it to your
+application.
 
 Then, run the development server:
 
@@ -38,10 +42,8 @@ Then, run the development server:
 pnpm dev
 ```
 
-Use the Expo Go app to run the mobile application.
-Your app will connect to the Convex cloud backend automatically.
-
-
+Use the Expo Go app to run the mobile application. Your app will connect to the
+Convex cloud backend automatically.
 
 ## Project Structure
 

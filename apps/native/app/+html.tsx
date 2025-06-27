@@ -7,10 +7,10 @@ import { ReactNode } from 'react';
 // do not have access to the DOM or browser APIs.
 export default function Root({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang='en'>
       <head>
-        <meta charSet="utf-8" />
-        <meta content="IE=edge" httpEquiv="X-UA-Compatible" />
+        <meta charSet='utf-8' />
+        <meta content='IE=edge' httpEquiv='X-UA-Compatible' />
 
         {/*
           This viewport disables scaling which makes the mobile website act more like a native app.
@@ -18,8 +18,8 @@ export default function Root({ children }: { children: ReactNode }) {
             <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         */}
         <meta
-          content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1.00001,viewport-fit=cover"
-          name="viewport"
+          content='width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1.00001,viewport-fit=cover'
+          name='viewport'
         />
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
