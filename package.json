@@ -6,27 +6,30 @@
     "packages/*"
   ],
   "scripts": {
-    "check": "biome check --write .",
-    "prepare": "husky",
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F @Chatzo/backend dev",
-    "dev:setup": "turbo -F @Chatzo/backend dev:setup"
+    "dev:setup": "turbo -F @Chatzo/backend dev:setup",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
+    "lint:check": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {},
   "devDependencies": {
     "turbo": "^2.5.4",
-    "@biomejs/biome": "^2.0.0",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.5.0"
-  },
-  "lint-staged": {
-    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
-      "biome check --write ."
-    ]
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-native": "^4.1.0"
   },
   "packageManager": "pnpm@10.8.0"
 }
