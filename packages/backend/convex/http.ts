@@ -3,6 +3,14 @@ import { chat, chatOptions, getModels } from './ai';
 import { testEndpoint, testGoogleAI } from './test';
 import { httpAction } from './_generated/server';
 import { api } from './_generated/api';
+import {
+  completions,
+  createThread,
+  getThreads,
+  getMessages,
+  generateTitle,
+} from './chat_http/routes/chat';
+import { getUserUsage, getModelUsage } from './chat_http/routes/analytics';
 
 const http = httpRouter();
 
@@ -77,6 +85,50 @@ http.route({
       });
     }
   }),
+});
+
+// Analytics endpoints
+http.route({
+  path: '/api/analytics/usage',
+  method: 'GET',
+  handler: getUserUsage,
+});
+
+http.route({
+  path: '/api/analytics/models',
+  method: 'GET',
+  handler: getModelUsage,
+});
+
+// Chat API endpoints
+http.route({
+  path: '/api/chat/completions',
+  method: 'POST',
+  handler: completions,
+});
+
+http.route({
+  path: '/api/chat/generate-title',
+  method: 'POST',
+  handler: generateTitle,
+});
+
+http.route({
+  path: '/api/chat/threads',
+  method: 'POST',
+  handler: createThread,
+});
+
+http.route({
+  path: '/api/chat/threads',
+  method: 'GET',
+  handler: getThreads,
+});
+
+http.route({
+  path: '/api/chat/threads/.*/messages',
+  method: 'GET',
+  handler: getMessages,
 });
 
 export default http;
