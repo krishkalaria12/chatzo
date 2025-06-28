@@ -2,7 +2,7 @@ import React from 'react';
 import { View, useWindowDimensions, Platform, ViewProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useColorScheme } from 'react-native';
+import { useColorScheme } from '@/lib/use-color-scheme';
 import { CurvedScrollBar } from './curved-scrollbar';
 import { useThemeColors } from './theme-colors';
 
@@ -42,18 +42,18 @@ export function AppContainer({
   enableScrollBar = false,
   ...props
 }: AppContainerProps) {
-  const colorScheme = useColorScheme();
+  const { colorScheme, isDarkColorScheme } = useColorScheme();
   const themeColors = useThemeColors();
   const { height } = useWindowDimensions();
 
   // Determine the actual status bar style
   const actualStatusBarStyle =
     statusBarStyle === 'auto'
-      ? colorScheme === 'dark'
+      ? isDarkColorScheme
         ? 'light'
         : 'dark'
       : statusBarStyle === 'inverted'
-        ? colorScheme === 'dark'
+        ? isDarkColorScheme
           ? 'dark'
           : 'light'
         : statusBarStyle;
@@ -80,7 +80,7 @@ export function AppContainer({
   // Configure scrollbar with smart defaults
   const scrollBarConfig: ScrollBarConfig = {
     enabled: shouldEnableScrollBar,
-    color: scrollBar?.color || (colorScheme === 'dark' ? '#f97316' : '#ea580c'), // Orange theme
+    color: scrollBar?.color || (isDarkColorScheme ? '#f97316' : '#ea580c'), // Orange theme
     width: scrollBar?.width || 4,
     showRail: scrollBar?.showRail ?? true,
     cornerRadius: scrollBar?.cornerRadius || 12,

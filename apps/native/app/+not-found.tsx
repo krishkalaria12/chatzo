@@ -16,7 +16,7 @@ export default function NotFoundScreen() {
             <Text className='text-muted-foreground text-center mb-8 max-w-sm'>
               Sorry, the page you're looking for doesn't exist.
             </Text>
-            <Link href='/' asChild>
+            <Link href='/(home)' asChild>
               <Text className='text-primary font-medium bg-primary/10 px-6 py-3 rounded-lg'>
                 Go to Home
               </Text>

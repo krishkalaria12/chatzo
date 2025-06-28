@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as ai from "../ai.js";
+import type * as auth from "../auth.js";
 import type * as config_models from "../config/models.js";
 import type * as config_prompts from "../config/prompts.js";
 import type * as healthCheck from "../healthCheck.js";
@@ -35,6 +36,7 @@ import type * as todos from "../todos.js";
  */
 declare const fullApi: ApiFromModules<{
   ai: typeof ai;
+  auth: typeof auth;
   "config/models": typeof config_models;
   "config/prompts": typeof config_prompts;
   healthCheck: typeof healthCheck;

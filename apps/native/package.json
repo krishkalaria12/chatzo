@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-sdk/google": "^1.2.19",
     "@ai-sdk/react": "^1.2.12",
+    "@clerk/clerk-expo": "^2.14.0",
     "@expo/vector-icons": "^14.0.4",
     "@react-native-picker/picker": "2.11.1",
     "@react-navigation/bottom-tabs": "^7.2.0",
@@ -44,7 +45,8 @@
     "react-native-svg": "15.11.2",
     "react-native-web": "^0.20.0",
     "tailwind-merge": "^3.3.1",
-    "zod": "^3.25.67"
+    "zod": "^3.25.67",
+    "zustand": "^5.0.6"
   },
   "devDependencies": {
     "@babel/core": "^7.26.10",

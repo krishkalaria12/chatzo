@@ -1,37 +1,51 @@
 import '@/polyfills';
-import { ConvexProvider, ConvexReactClient } from 'convex/react';
 import { Stack } from 'expo-router';
-import { DarkTheme, DefaultTheme, type Theme, ThemeProvider } from '@react-navigation/native';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import '../global.css';
-import { NAV_THEME } from '@/lib/constants';
-import React, { useRef } from 'react';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { ConvexProvider, ConvexReactClient } from 'convex/react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
 import { useColorScheme } from '@/lib/use-color-scheme';
+import React, { useRef } from 'react';
 import { Platform } from 'react-native';
 import { setAndroidNavigationBar } from '@/lib/android-navigation-bar';
+import * as SecureStore from 'expo-secure-store';
 
-const LIGHT_THEME: Theme = {
-  ...DefaultTheme,
-  colors: NAV_THEME.light,
-};
-const DARK_THEME: Theme = {
-  ...DarkTheme,
-  colors: NAV_THEME.dark,
+const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
+  unsavedChangesWarning: false,
+});
+
+// Clerk token cache for React Native
+const tokenCache = {
+  async getToken(key: string) {
+    try {
+      return SecureStore.getItemAsync(key);
+    } catch (err) {
+      return null;
+    }
+  },
+  async saveToken(key: string, value: string) {
+    try {
+      return SecureStore.setItemAsync(key, value);
+    } catch (err) {
+      return;
+    }
+  },
 };
 
 export const unstable_settings = {
   initialRouteName: 'index',
 };
 
-const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL!, {
-  unsavedChangesWarning: false,
-});
-
 export default function RootLayout() {
   const hasMounted = useRef(false);
   const { colorScheme, isDarkColorScheme } = useColorScheme();
   const [isColorSchemeLoaded, setIsColorSchemeLoaded] = React.useState(false);
+
+  const useIsomorphicLayoutEffect =
+    Platform.OS === 'web' && typeof window === 'undefined'
+      ? React.useEffect
+      : React.useLayoutEffect;
 
   useIsomorphicLayoutEffect(() => {
     if (hasMounted.current) {
@@ -44,25 +58,27 @@ export default function RootLayout() {
     setAndroidNavigationBar(colorScheme);
     setIsColorSchemeLoaded(true);
     hasMounted.current = true;
-  }, []);
+  }, [colorScheme]);
 
   if (!isColorSchemeLoaded) {
     return null;
   }
+
   return (
-    <ConvexProvider client={convex}>
-      <ThemeProvider value={isDarkColorScheme ? DARK_THEME : LIGHT_THEME}>
+    <ClerkProvider
+      tokenCache={tokenCache}
+      publishableKey={process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!}
+    >
+      <ConvexProvider client={convex}>
         <StatusBar style={isDarkColorScheme ? 'light' : 'dark'} />
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <Stack>
-            <Stack.Screen name='index' options={{ headerShown: false }} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name='(auth)' />
+            <Stack.Screen name='(home)' />
             <Stack.Screen name='modal' options={{ title: 'Modal', presentation: 'modal' }} />
           </Stack>
         </GestureHandlerRootView>
-      </ThemeProvider>
-    </ConvexProvider>
+      </ConvexProvider>
+    </ClerkProvider>
   );
 }
-
-const useIsomorphicLayoutEffect =
-  Platform.OS === 'web' && typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
