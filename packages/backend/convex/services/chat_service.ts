@@ -404,7 +404,6 @@ export const trackUsage = mutation({
     modelName: v.optional(v.string()),
     promptTokens: v.number(),
     completionTokens: v.number(),
-    reasoningTokens: v.optional(v.number()),
     totalTokens: v.number(),
     cost: v.optional(v.number()),
     duration: v.optional(v.number()),
@@ -419,7 +418,6 @@ export const trackUsage = mutation({
   handler: async (ctx, args) => {
     await ctx.db.insert('usageEvents', {
       ...args,
-      reasoningTokens: args.reasoningTokens || 0,
       timestamp: Date.now(),
       daysSinceEpoch: Math.floor(Date.now() / (24 * 60 * 60 * 1000)),
     });

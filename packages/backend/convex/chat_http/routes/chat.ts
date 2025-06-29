@@ -184,9 +184,49 @@ export const completions = httpAction(async (ctx, request) => {
               })
             );
 
+            // Track usage event for analytics
+            promises.push(
+              ctx.runMutation(api.services.chat_service.trackUsage, {
+                userId: userId,
+                threadId: currentThreadId,
+                modelId: model,
+                modelName: completion.response.modelId || model,
+                promptTokens: completion.usage.promptTokens || 0,
+                completionTokens: completion.usage.completionTokens || 0,
+                totalTokens: completion.usage.totalTokens || 0,
+                cost: 0, // TODO: Calculate actual cost based on model pricing
+                duration,
+                status: 'success',
+              })
+            );
+
             await Promise.all(promises);
           } catch (dbError) {
             console.error('Database save error:', dbError);
+          }
+        }
+      },
+      onError: async error => {
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+
+        // Track failed usage event
+        if (currentThreadId) {
+          try {
+            await ctx.runMutation(api.services.chat_service.trackUsage, {
+              userId: userId,
+              threadId: currentThreadId,
+              modelId: model,
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              cost: 0,
+              duration,
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
+          } catch (dbError) {
+            console.error('Failed to track error usage:', dbError);
           }
         }
       },

@@ -27,7 +27,6 @@ export const MessageMetadata = v.object({
   modelName: v.optional(v.string()),
   promptTokens: v.optional(v.number()),
   completionTokens: v.optional(v.number()),
-  reasoningTokens: v.optional(v.number()),
   serverDurationMs: v.optional(v.number()),
   temperature: v.optional(v.number()),
   maxTokens: v.optional(v.number()),

@@ -9,7 +9,6 @@ export const UsageEvent = v.object({
   modelName: v.optional(v.string()),
   promptTokens: v.number(), // p -> promptTokens
   completionTokens: v.number(), // c -> completionTokens
-  reasoningTokens: v.optional(v.number()), // r -> reasoningTokens
   totalTokens: v.number(),
   cost: v.optional(v.number()), // Cost in USD
   duration: v.optional(v.number()), // Duration in milliseconds
@@ -35,7 +34,6 @@ export const DailyUsageSummary = v.object({
       requestCount: v.number(),
       totalPromptTokens: v.number(),
       totalCompletionTokens: v.number(),
-      totalReasoningTokens: v.number(),
       totalCost: v.number(),
       averageDuration: v.number(),
     })

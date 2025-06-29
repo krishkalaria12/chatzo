@@ -56,7 +56,7 @@ export async function getAuthUserId(
 export async function getUserIdFromClerkId(
   ctx: ActionCtx | QueryCtx | MutationCtx,
   clerkId: string
-): Promise<string | null> {
+): Promise<any | null> {
   try {
     // If we have direct database access (Query/Mutation), use it
     if ('db' in ctx) {
