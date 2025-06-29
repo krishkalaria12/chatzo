@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 // Usage event for tracking AI model usage
 export const UsageEvent = v.object({
-  userId: v.string(),
+  userId: v.id('users'),
   threadId: v.optional(v.id('threads')),
   messageId: v.optional(v.string()),
   modelId: v.string(), // "openai:gpt-4o", "anthropic:claude-3.5-sonnet", etc.
@@ -26,7 +26,7 @@ export const UsageEvent = v.object({
 
 // Daily usage summary for analytics
 export const DailyUsageSummary = v.object({
-  userId: v.string(),
+  userId: v.id('users'),
   date: v.string(), // YYYY-MM-DD format
   daysSinceEpoch: v.number(),
   modelUsage: v.array(

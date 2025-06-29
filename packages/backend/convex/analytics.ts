@@ -1,24 +1,43 @@
 import { query } from './_generated/server';
-import { v } from 'convex/values';
+import { v, ConvexError } from 'convex/values';
+
+/**
+ * Helper function to get user by clerkId
+ */
+const getUserByClerkId = async (ctx: any, clerkId: string) => {
+  const user = await ctx.db
+    .query('users')
+    .withIndex('by_clerk_id', (q: any) => q.eq('clerkId', clerkId))
+    .unique();
+  
+  if (!user) {
+    throw new ConvexError('User not found');
+  }
+  
+  return user;
+};
 
 /**
  * Get user usage statistics for analytics
  */
 export const getUserUsageStats = query({
   args: {
-    userId: v.string(),
+    clerkId: v.string(),
     startTimestamp: v.number(),
     endTimestamp: v.number(),
     days: v.number(),
   },
   handler: async (ctx, args) => {
-    const { userId, startTimestamp, endTimestamp, days } = args;
+    const { clerkId, startTimestamp, endTimestamp, days } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
 
     // Get all usage events in the time range
     const usageEvents = await ctx.db
       .query('usageEvents')
       .withIndex('by_user_timestamp', (q: any) =>
-        q.eq('userId', userId).gte('timestamp', startTimestamp).lte('timestamp', endTimestamp)
+        q.eq('userId', user._id).gte('timestamp', startTimestamp).lte('timestamp', endTimestamp)
       )
       .collect();
 
@@ -76,18 +95,21 @@ export const getUserUsageStats = query({
  */
 export const getModelUsageStats = query({
   args: {
-    userId: v.string(),
+    clerkId: v.string(),
     startTimestamp: v.number(),
     endTimestamp: v.number(),
   },
   handler: async (ctx, args) => {
-    const { userId, startTimestamp, endTimestamp } = args;
+    const { clerkId, startTimestamp, endTimestamp } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
 
     // Get usage events grouped by model
     const usageEvents = await ctx.db
       .query('usageEvents')
       .withIndex('by_user_timestamp', (q: any) =>
-        q.eq('userId', userId).gte('timestamp', startTimestamp).lte('timestamp', endTimestamp)
+        q.eq('userId', user._id).gte('timestamp', startTimestamp).lte('timestamp', endTimestamp)
       )
       .collect();
 

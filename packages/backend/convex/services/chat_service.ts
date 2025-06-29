@@ -1,280 +1,264 @@
 import { action, mutation, query } from '../_generated/server';
 import { ConvexError, v } from 'convex/values';
-import { HTTPAIMessage } from '../schemas';
+import { getUserIdFromClerkId } from './middleware';
 import { api } from '../_generated/api';
 
+// Define message type for better typing
+interface ProcessedMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 /**
- * Chat completion service - handles AI model interactions using Vercel AI SDK
+ * Helper function to get user by clerkId - now using middleware
  */
-export const completeChatStream = action({
+const getUserByClerkId = async (ctx: any, clerkId: string) => {
+  const userId = await getUserIdFromClerkId(ctx, clerkId);
+  if (!userId) {
+    throw new ConvexError('User not found');
+  }
+
+  const user = await ctx.db.get(userId);
+  if (!user) {
+    throw new ConvexError('User not found');
+  }
+
+  return user;
+};
+
+/**
+ * Get messages for a thread (internal use - no auth check)
+ */
+export const getThreadMessagesInternal = query({
   args: {
-    messages: v.array(HTTPAIMessage),
-    modelId: v.string(),
-    threadId: v.optional(v.id('threads')),
-    userId: v.string(),
-    temperature: v.optional(v.number()),
-    maxTokens: v.optional(v.number()),
+    threadId: v.id('threads'),
+    limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { messages, modelId, threadId, userId, temperature, maxTokens } = args;
+    const { threadId, limit = 100 } = args;
+
+    const messages = await ctx.db
+      .query('messages')
+      .withIndex('by_thread_created', (q: any) => q.eq('threadId', threadId))
+      .order('asc')
+      .filter((q: any) => q.neq(q.field('isDeleted'), true))
+      .paginate({ numItems: limit, cursor: null })
+      .then((result: any) => result.page);
+
+    return messages;
+  },
+});
+
+/**
+ * Intelligent context compression for long conversations
+ */
+export const compressConversationContext = action({
+  args: {
+    threadId: v.id('threads'),
+    newMessages: v.array(v.any()),
+    maxTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<ProcessedMessage[]> => {
+    const { threadId, newMessages, maxTokens = 4000 } = args;
 
     try {
-      // Dynamic import of AI SDK
-      const { streamText } = await import('ai');
-      const { getModelById } = await import('../config/models');
+      // Get existing messages from database
+      const existingMessages: any[] = await ctx.runQuery(
+        api.services.chat_service.getThreadMessagesInternal,
+        {
+          threadId,
+          limit: 100, // Get more messages for compression
+        }
+      );
 
-      // Get model configuration
-      const modelConfig = getModelById(modelId);
-      if (!modelConfig) {
-        throw new ConvexError(`Unknown model: ${modelId}`);
+      // Combine existing + new messages
+      const allMessages: ProcessedMessage[] = [
+        ...existingMessages.map(
+          (msg: any): ProcessedMessage => ({
+            role: msg.role,
+            content:
+              typeof msg.content === 'string'
+                ? msg.content
+                : msg.content?.text || String(msg.content),
+          })
+        ),
+        ...newMessages.map(
+          (msg: any): ProcessedMessage => ({
+            role: msg.role,
+            content:
+              typeof msg.content === 'string'
+                ? msg.content
+                : msg.content?.text || String(msg.content),
+          })
+        ),
+      ];
+
+      // If conversation is short, return as-is
+      if (allMessages.length <= 10) {
+        return allMessages;
       }
 
-      // Import the appropriate provider
-      let model;
-      if (modelConfig.provider === 'google') {
-        const { google } = await import('@ai-sdk/google');
-        model = google(modelConfig.id);
-      } else if (modelConfig.provider === 'mistral') {
-        const { mistral } = await import('@ai-sdk/mistral');
-        model = mistral(modelConfig.id);
-      } else {
-        throw new ConvexError(`Unsupported model provider: ${modelConfig.provider as string}`);
+      // Estimate tokens (rough: 4 chars per token)
+      const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+
+      // Always preserve system messages and recent messages
+      const systemMessages = allMessages.filter((m: ProcessedMessage) => m.role === 'system');
+      const conversationMessages = allMessages.filter((m: ProcessedMessage) => m.role !== 'system');
+      const recentMessages = conversationMessages.slice(-6); // Last 6 messages
+
+      let compressed: ProcessedMessage[] = [...systemMessages, ...recentMessages];
+      let totalTokens = compressed.reduce((sum, msg) => sum + estimateTokens(msg.content), 0);
+
+      // Add older messages if they fit
+      const olderMessages = conversationMessages.slice(0, -6);
+      for (let i = olderMessages.length - 1; i >= 0; i--) {
+        const msg = olderMessages[i];
+        const msgTokens = estimateTokens(msg.content);
+
+        if (totalTokens + msgTokens <= maxTokens * 0.8) {
+          // Leave 20% buffer
+          compressed.splice(-6, 0, msg); // Insert before recent messages
+          totalTokens += msgTokens;
+        } else {
+          break;
+        }
       }
 
-      // Convert messages to AI SDK format
-      const aiMessages = messages.map(msg => ({
-        role: msg.role,
-        content:
-          typeof msg.content === 'string'
-            ? msg.content
-            : msg.content?.type === 'text'
-              ? msg.content.text
-              : String(msg.content),
-      }));
+      // If we removed many messages, create a summary
+      if (allMessages.length - compressed.length > 8) {
+        try {
+          const { generateText } = await import('ai');
+          const { google } = await import('@ai-sdk/google');
 
-      const startTime = Date.now();
+          const summaryContent = olderMessages
+            .slice(0, 10)
+            .map((m: ProcessedMessage) => `${m.role}: ${m.content.slice(0, 100)}...`)
+            .join('\n');
 
-      // Always use streaming
-      const result = await streamText({
-        model,
-        messages: aiMessages,
-        temperature: temperature ?? modelConfig.temperature,
-        maxTokens: maxTokens ?? modelConfig.maxTokens,
-        onFinish: async completion => {
-          const endTime = Date.now();
-          const duration = endTime - startTime;
+          const { text } = await generateText({
+            model: google('gemini-2.0-flash-exp'),
+            prompt: `Summarize this conversation context in 2-3 sentences to preserve important details:\n\n${summaryContent}`,
+            maxTokens: 100,
+            temperature: 0.3,
+          });
 
-          // Save messages and track usage in background
-          if (threadId) {
-            try {
-              await Promise.all([
-                // Save user message
-                ctx.runMutation(api.services.chat_service.saveMessage, {
-                  threadId,
-                  messageId:
-                    messages.find(m => m.role === 'user')?.messageId || crypto.randomUUID(),
-                  role: 'user',
-                  content: messages.find(m => m.role === 'user')?.content || '',
-                  metadata: {},
-                }),
-                // Save assistant message
-                ctx.runMutation(api.services.chat_service.saveMessage, {
-                  threadId,
-                  messageId: completion.response.id || crypto.randomUUID(),
-                  role: 'assistant',
-                  content: completion.text,
-                  metadata: {
-                    modelId,
-                    modelName: completion.response.modelId,
-                    promptTokens: completion.usage.promptTokens,
-                    completionTokens: completion.usage.completionTokens,
-                    serverDurationMs: duration,
-                    temperature: temperature ?? modelConfig.temperature,
-                    maxTokens: maxTokens ?? modelConfig.maxTokens,
-                  },
-                }),
-                // Update thread activity
-                ctx.runMutation(api.services.chat_service.updateThreadActivity, {
-                  threadId,
-                }),
-                // Track usage
-                ctx.runMutation(api.services.chat_service.trackUsage, {
-                  userId,
-                  threadId,
-                  messageId: completion.response.id || crypto.randomUUID(),
-                  modelId,
-                  modelName: completion.response.modelId,
-                  promptTokens: completion.usage.promptTokens,
-                  completionTokens: completion.usage.completionTokens,
-                  totalTokens: completion.usage.totalTokens,
-                  cost: 0, // Calculate based on model pricing
-                  duration,
-                  status: 'success',
-                }),
-              ]);
-            } catch (dbError) {
-              console.error('Database save error:', dbError);
-              // Don't fail the completion if DB save fails
-            }
-          }
-        },
-        onError: async error => {
-          // Track failed usage
-          if (threadId) {
-            try {
-              await ctx.runMutation(api.services.chat_service.trackUsage, {
-                userId,
-                threadId,
-                modelId,
-                promptTokens: 0,
-                completionTokens: 0,
-                totalTokens: 0,
-                status: 'error',
-                errorMessage: error instanceof Error ? error.message : 'Unknown error',
-              });
-            } catch (dbError) {
-              console.error('Failed to track error usage:', dbError);
-            }
-          }
-        },
-      });
+          const summaryMessage: ProcessedMessage = {
+            role: 'system',
+            content: `[Previous conversation summary: ${text}]`,
+          };
 
-      return {
-        stream: result.toTextStreamResponse(),
-        messageId: crypto.randomUUID(),
-      };
+          return [
+            summaryMessage,
+            ...compressed.filter((m: ProcessedMessage) => m.role !== 'system'),
+          ];
+        } catch (error) {
+          console.error('Summary generation failed:', error);
+          // Fallback to simple summary
+          const summaryMessage: ProcessedMessage = {
+            role: 'system',
+            content: `[Previous conversation with ${allMessages.length - compressed.length} earlier messages omitted for context length]`,
+          };
+
+          return [
+            summaryMessage,
+            ...compressed.filter((m: ProcessedMessage) => m.role !== 'system'),
+          ];
+        }
+      }
+
+      return compressed;
     } catch (error) {
-      console.error('Chat completion error:', error);
-      throw new ConvexError(
-        `Chat completion failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      console.error('Context compression error:', error);
+      // Fallback: return recent messages only
+      return newMessages.slice(-5).map(
+        (msg: any): ProcessedMessage => ({
+          role: msg.role,
+          content: typeof msg.content === 'string' ? msg.content : String(msg.content),
+        })
       );
     }
   },
 });
 
 /**
- * Generate title for a chat thread using AI SDK structured data
+ * Generate title for a chat thread - ALWAYS using gemini-2.0-flash
  */
 export const generateThreadTitle = action({
   args: {
     messages: v.array(v.string()),
-    modelId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { messages, modelId = 'gemini-2.5-flash' } = args;
+    const { messages } = args;
 
     try {
       const { generateObject } = await import('ai');
       const { z } = await import('zod');
-      const { getModelById } = await import('../config/models');
+      const { google } = await import('@ai-sdk/google');
 
-      const modelConfig = getModelById(modelId);
-      if (!modelConfig) {
-        throw new ConvexError(`Unknown model: ${modelId}`);
-      }
+      // Always use gemini-2.0-flash for title generation
+      const model = google('gemini-2.0-flash');
 
-      let model;
-      if (modelConfig.provider === 'google') {
-        const { google } = await import('@ai-sdk/google');
-        model = google(modelConfig.id);
-      } else if (modelConfig.provider === 'mistral') {
-        const { mistral } = await import('@ai-sdk/mistral');
-        model = mistral(modelConfig.id);
-      } else {
-        throw new ConvexError(`Unsupported model provider: ${modelConfig.provider as string}`);
-      }
-
-      // Simple fallback for title generation since title_prompts file was deleted
       const prompt = `Generate a concise, descriptive title (2-6 words) for this conversation:\n\n${messages
         .slice(0, 3)
         .map((msg, i) => `Message ${i + 1}: ${msg}`)
         .join('\n')}`;
 
-      const result = await generateObject({
+      const { object } = await generateObject({
         model,
         schema: z.object({
           title: z
             .string()
             .describe('A concise, descriptive title for the conversation (2-6 words)'),
-          category: z
-            .enum([
-              'technical-help',
-              'code-review',
-              'architecture',
-              'debugging',
-              'learning',
-              'planning',
-              'general',
-              'brainstorming',
-            ])
-            .optional(),
-          confidence: z.number().min(0).max(1).optional(),
         }),
         prompt,
         temperature: 0.3,
+        maxTokens: 50,
       });
 
       return {
-        title: result.object.title,
-        category: result.object.category || 'general',
-        confidence: result.object.confidence || 0.8,
+        title: object.title,
       };
     } catch (error) {
       console.error('Title generation error:', error);
-
       // Simple fallback title generation
       const topics = ['Chat', 'Discussion', 'Conversation', 'Question', 'Help'];
       return {
         title: topics[Math.floor(Math.random() * topics.length)],
-        category: 'general' as const,
-        confidence: 0.5,
       };
     }
   },
 });
 
 /**
- * Create a new thread or get existing one
+ * Create a new thread
  */
 export const createOrGetThread = mutation({
   args: {
-    userId: v.string(),
+    clerkId: v.string(),
     title: v.optional(v.string()),
-    settings: v.optional(
-      v.object({
-        modelId: v.optional(v.string()),
-        temperature: v.optional(v.number()),
-        maxTokens: v.optional(v.number()),
-        systemPrompt: v.optional(v.string()),
-      })
-    ),
   },
   handler: async (ctx, args) => {
-    const { userId, title = 'New Chat', settings } = args;
+    const { clerkId, title = 'New Chat' } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
 
     const now = Date.now();
     const threadId = await ctx.db.insert('threads', {
-      userId,
+      userId: user._id, // Use convex user ID instead of clerkId
       title,
       createdAt: now,
       updatedAt: now,
       messageCount: 0,
-      settings: {
-        modelId: settings?.modelId || 'gemini-2.5-flash',
-        temperature: settings?.temperature ?? 0.7,
-        maxTokens: settings?.maxTokens ?? 1000,
-        systemPrompt: settings?.systemPrompt,
-      },
     });
 
     return {
       id: threadId,
-      userId,
+      userId: user._id,
       title,
       createdAt: now,
       updatedAt: now,
       messageCount: 0,
-      settings,
     };
   },
 });
@@ -286,18 +270,16 @@ export const updateThreadTitle = mutation({
   args: {
     threadId: v.id('threads'),
     title: v.string(),
-    category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { threadId, title, category } = args;
+    const { threadId, title } = args;
 
     await ctx.db.patch(threadId, {
       title,
       updatedAt: Date.now(),
-      ...(category && { tags: [category] }),
     });
 
-    return { threadId, title, category };
+    return { threadId, title };
   },
 });
 
@@ -306,17 +288,20 @@ export const updateThreadTitle = mutation({
  */
 export const getUserThreads = query({
   args: {
-    userId: v.string(),
+    clerkId: v.string(),
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
     archived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { userId, limit = 20, offset = 0, archived = false } = args;
+    const { clerkId, limit = 20, offset = 0, archived = false } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
 
     let query = ctx.db
       .query('threads')
-      .withIndex('by_user_updated', (q: any) => q.eq('userId', userId))
+      .withIndex('by_user_updated', (q: any) => q.eq('userId', user._id))
       .order('desc');
 
     if (archived !== undefined) {
@@ -337,16 +322,19 @@ export const getUserThreads = query({
 export const getThreadMessages = query({
   args: {
     threadId: v.id('threads'),
-    userId: v.string(),
+    clerkId: v.string(),
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { threadId, userId, limit = 50, offset = 0 } = args;
+    const { threadId, clerkId, limit = 50, offset = 0 } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
 
     // Verify user has access to this thread
     const thread = await ctx.db.get(threadId);
-    if (!thread || thread.userId !== userId) {
+    if (!thread || thread.userId !== user._id) {
       throw new ConvexError('Thread not found or access denied');
     }
 
@@ -410,13 +398,14 @@ export const updateThreadActivity = mutation({
  */
 export const trackUsage = mutation({
   args: {
-    userId: v.string(),
+    userId: v.id('users'), // Now using convex user ID
     threadId: v.optional(v.id('threads')),
     messageId: v.optional(v.string()),
     modelId: v.string(),
     modelName: v.optional(v.string()),
     promptTokens: v.number(),
     completionTokens: v.number(),
+    reasoningTokens: v.optional(v.number()),
     totalTokens: v.number(),
     cost: v.optional(v.number()),
     duration: v.optional(v.number()),
@@ -431,239 +420,9 @@ export const trackUsage = mutation({
   handler: async (ctx, args) => {
     await ctx.db.insert('usageEvents', {
       ...args,
+      reasoningTokens: args.reasoningTokens || 0,
       timestamp: Date.now(),
       daysSinceEpoch: Math.floor(Date.now() / (24 * 60 * 60 * 1000)),
     });
-  },
-});
-
-/**
- * Intelligent context compression for long conversations
- */
-const compressConversationContext = async (
-  ctx: any,
-  threadId: string,
-  newMessages: any[],
-  maxTokens: number = 4000
-) => {
-  try {
-    // Get existing messages from database
-    const existingMessages = await ctx.db
-      .query('messages')
-      .withIndex('by_thread_created', (q: any) => q.eq('threadId', threadId))
-      .order('asc')
-      .collect();
-
-    // Combine existing + new messages
-    const allMessages = [
-      ...existingMessages.map((msg: any) => ({
-        role: msg.role,
-        content:
-          typeof msg.content === 'string' ? msg.content : msg.content?.text || String(msg.content),
-      })),
-      ...newMessages.map((msg: any) => ({
-        role: msg.role,
-        content:
-          typeof msg.content === 'string' ? msg.content : msg.content?.text || String(msg.content),
-      })),
-    ];
-
-    // If conversation is short, return as-is
-    if (allMessages.length <= 10) {
-      return allMessages;
-    }
-
-    // Estimate tokens (rough: 4 chars per token)
-    const estimateTokens = (text: string) => Math.ceil(text.length / 4);
-
-    // Always preserve system messages and recent messages
-    const systemMessages = allMessages.filter(m => m.role === 'system');
-    const conversationMessages = allMessages.filter(m => m.role !== 'system');
-    const recentMessages = conversationMessages.slice(-6); // Last 6 messages
-
-    let compressed = [...systemMessages, ...recentMessages];
-    let totalTokens = compressed.reduce((sum, msg) => sum + estimateTokens(msg.content), 0);
-
-    // Add older messages if they fit
-    const olderMessages = conversationMessages.slice(0, -6);
-    for (let i = olderMessages.length - 1; i >= 0; i--) {
-      const msg = olderMessages[i];
-      const msgTokens = estimateTokens(msg.content);
-
-      if (totalTokens + msgTokens <= maxTokens * 0.8) {
-        // Leave 20% buffer
-        compressed.splice(-6, 0, msg); // Insert before recent messages
-        totalTokens += msgTokens;
-      } else {
-        break;
-      }
-    }
-
-    // If we removed many messages, create a summary
-    if (allMessages.length - compressed.length > 8) {
-      const { generateText } = await import('ai');
-      const { google } = await import('@ai-sdk/google');
-
-      try {
-        const summaryContent = olderMessages
-          .slice(0, 10)
-          .map(m => `${m.role}: ${m.content.slice(0, 100)}...`)
-          .join('\n');
-
-        const summary = await generateText({
-          model: google('gemini-2.5-flash'),
-          prompt: `Summarize this conversation context in 2-3 sentences to preserve important details:\n\n${summaryContent}`,
-          maxTokens: 100,
-          temperature: 0.3,
-        });
-
-        const summaryMessage = {
-          role: 'system' as const,
-          content: `[Previous conversation summary: ${summary.text}]`,
-        };
-
-        return [summaryMessage, ...compressed.filter(m => m.role !== 'system')];
-      } catch (error) {
-        console.error('Summary generation failed:', error);
-        // Fallback to simple summary
-        const summaryMessage = {
-          role: 'system' as const,
-          content: `[Previous conversation with ${allMessages.length - compressed.length} earlier messages omitted for context length]`,
-        };
-
-        return [summaryMessage, ...compressed.filter(m => m.role !== 'system')];
-      }
-    }
-
-    return compressed;
-  } catch (error) {
-    console.error('Context compression error:', error);
-    // Fallback: return recent messages only
-    return newMessages.slice(-5);
-  }
-};
-
-/**
- * Enhanced chat completion with automatic context management
- */
-export const completeChatWithContext = action({
-  args: {
-    messages: v.array(HTTPAIMessage),
-    modelId: v.string(),
-    threadId: v.id('threads'),
-    userId: v.string(),
-    temperature: v.optional(v.number()),
-    maxTokens: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { messages, modelId, threadId, userId, temperature, maxTokens } = args;
-
-    try {
-      // Get compressed context including database history
-      const compressedMessages = await compressConversationContext(
-        ctx,
-        threadId,
-        messages,
-        maxTokens || 4000
-      );
-
-      // Continue with existing chat completion logic using compressed messages
-      const { streamText } = await import('ai');
-      const { getModelById } = await import('../config/models');
-
-      const modelConfig = getModelById(modelId);
-      if (!modelConfig) {
-        throw new ConvexError(`Unknown model: ${modelId}`);
-      }
-
-      let model;
-      if (modelConfig.provider === 'google') {
-        const { google } = await import('@ai-sdk/google');
-        model = google(modelConfig.id);
-      } else if (modelConfig.provider === 'mistral') {
-        const { mistral } = await import('@ai-sdk/mistral');
-        model = mistral(modelConfig.id);
-      } else {
-        throw new ConvexError(`Unsupported model provider: ${modelConfig.provider as string}`);
-      }
-
-      const startTime = Date.now();
-
-      const result = await streamText({
-        model,
-        messages: compressedMessages,
-        temperature: temperature ?? modelConfig.temperature,
-        maxTokens: maxTokens ?? modelConfig.maxTokens,
-        onFinish: async completion => {
-          const endTime = Date.now();
-          const duration = endTime - startTime;
-
-          // Save only the new user message and AI response
-          try {
-            await Promise.all([
-              // Save new user message
-              ctx.runMutation(api.services.chat_service.saveMessage, {
-                threadId,
-                messageId: messages.find(m => m.role === 'user')?.messageId || crypto.randomUUID(),
-                role: 'user',
-                content: messages.find(m => m.role === 'user')?.content || '',
-                metadata: {},
-              }),
-              // Save assistant response
-              ctx.runMutation(api.services.chat_service.saveMessage, {
-                threadId,
-                messageId: completion.response.id || crypto.randomUUID(),
-                role: 'assistant',
-                content: completion.text,
-                metadata: {
-                  modelId,
-                  modelName: completion.response.modelId,
-                  promptTokens: completion.usage.promptTokens,
-                  completionTokens: completion.usage.completionTokens,
-                  serverDurationMs: duration,
-                  temperature: temperature ?? modelConfig.temperature,
-                  maxTokens: maxTokens ?? modelConfig.maxTokens,
-                  contextCompressed: compressedMessages.length < messages.length + 5, // Indicate if context was compressed
-                },
-              }),
-              // Update thread activity
-              ctx.runMutation(api.services.chat_service.updateThreadActivity, {
-                threadId,
-              }),
-              // Track usage
-              ctx.runMutation(api.services.chat_service.trackUsage, {
-                userId,
-                threadId,
-                messageId: completion.response.id || crypto.randomUUID(),
-                modelId,
-                modelName: completion.response.modelId,
-                promptTokens: completion.usage.promptTokens,
-                completionTokens: completion.usage.completionTokens,
-                totalTokens: completion.usage.totalTokens,
-                cost: 0,
-                duration,
-                status: 'success',
-              }),
-            ]);
-          } catch (dbError) {
-            console.error('Database save error:', dbError);
-          }
-        },
-      });
-
-      return {
-        stream: result.toTextStreamResponse(),
-        messageId: crypto.randomUUID(),
-        contextInfo: {
-          totalMessages: compressedMessages.length,
-          compressed: compressedMessages.length < messages.length + 5,
-        },
-      };
-    } catch (error) {
-      console.error('Chat completion with context error:', error);
-      throw new ConvexError(
-        `Chat completion failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
   },
 });

@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 // Thread schema for organizing conversations
 export const Thread = v.object({
-  userId: v.string(), // Clerk user ID
+  userId: v.id('users'), // Reference to users table instead of Clerk ID string
   title: v.string(),
   description: v.optional(v.string()),
   createdAt: v.number(),
@@ -12,12 +12,4 @@ export const Thread = v.object({
   isArchived: v.optional(v.boolean()),
   isPinned: v.optional(v.boolean()),
   tags: v.optional(v.array(v.string())),
-  settings: v.optional(
-    v.object({
-      modelId: v.optional(v.string()),
-      temperature: v.optional(v.number()),
-      maxTokens: v.optional(v.number()),
-      systemPrompt: v.optional(v.string()),
-    })
-  ),
 });

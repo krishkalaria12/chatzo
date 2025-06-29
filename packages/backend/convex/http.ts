@@ -1,5 +1,5 @@
 import { httpRouter } from 'convex/server';
-import { chat, chatOptions, getModels } from './ai';
+import { getModels } from './ai';
 import { testEndpoint, testGoogleAI } from './test';
 import { httpAction } from './_generated/server';
 import { api } from './_generated/api';
@@ -33,20 +33,6 @@ http.route({
   path: '/api/models',
   method: 'GET',
   handler: getModels,
-});
-
-// Handle POST requests to /api/chat
-http.route({
-  path: '/api/chat',
-  method: 'POST',
-  handler: chat,
-});
-
-// Handle OPTIONS requests to /api/chat for CORS
-http.route({
-  path: '/api/chat',
-  method: 'OPTIONS',
-  handler: chatOptions,
 });
 
 // Sync user data from Clerk

@@ -51,13 +51,8 @@ export const completions = httpAction(async (ctx, request) => {
     // Create thread if none provided
     if (!currentThreadId) {
       const newThread = await ctx.runMutation(api.services.chat_service.createOrGetThread, {
-        userId,
+        clerkId,
         title: 'New Chat',
-        settings: {
-          modelId: model,
-          temperature,
-          maxTokens: max_tokens,
-        },
       });
       currentThreadId = newThread.id;
       isNewThread = true;
@@ -83,32 +78,60 @@ export const completions = httpAction(async (ctx, request) => {
       return createErrorResponse(`Unsupported model provider: ${modelConfig.provider}`, 400);
     }
 
-    // Get existing messages from thread for context
+    // Use intelligent context compression for existing threads
     let contextMessages = aiMessages;
+    let contextCompressed = false;
+
     if (currentThreadId && !isNewThread) {
       try {
-        const existingMessages = await ctx.runQuery(api.services.chat_service.getThreadMessages, {
-          threadId: currentThreadId,
-          userId,
-          limit: 20,
-          offset: 0,
-        });
+        // Use the intelligent compression function from chat_service
+        const compressedMessages = await ctx.runAction(
+          api.services.chat_service.compressConversationContext,
+          {
+            threadId: currentThreadId,
+            newMessages: aiMessages,
+            maxTokens: max_tokens || 4000,
+          }
+        );
 
-        // Combine existing + new messages
-        const allMessages = [
-          ...existingMessages.map((msg: any) => ({
-            role: msg.role,
-            content: typeof msg.content === 'string' ? msg.content : String(msg.content),
-          })),
-          ...aiMessages,
-        ];
+        contextMessages = compressedMessages;
+        contextCompressed = compressedMessages.length < aiMessages.length + 5; // Rough estimation
 
-        contextMessages = allMessages;
+        console.log(
+          `Context compression: Original ${aiMessages.length} + existing -> ${compressedMessages.length} messages`
+        );
       } catch (error) {
-        console.warn('Failed to get context messages:', error);
-        // Continue with just the new messages
+        console.warn('Failed to compress context, using original messages:', error);
+        // Fallback to original messages if compression fails
       }
     }
+
+    // Start title generation in parallel for new threads (don't await)
+    if (isNewThread && messages.length >= 1 && generate_title) {
+      const messageTexts = messages
+        .map((msg: any) => (typeof msg.content === 'string' ? msg.content : String(msg.content)))
+        .filter((text: string) => text.trim().length > 0);
+
+      if (messageTexts.length > 0) {
+        // Fire and forget - runs in parallel with streaming
+        // Title generation now always uses gemini-2.0-flash internally
+        ctx
+          .runAction(api.services.chat_service.generateThreadTitle, {
+            messages: messageTexts,
+          })
+          .then((titleResult: any) =>
+            ctx.runMutation(api.services.chat_service.updateThreadTitle, {
+              threadId: currentThreadId,
+              title: titleResult.title,
+            })
+          )
+          .catch((error: any) => {
+            console.error('Title generation failed:', error);
+          });
+      }
+    }
+
+    const startTime = Date.now();
 
     const result = await streamText({
       model: aiModel,
@@ -116,19 +139,29 @@ export const completions = httpAction(async (ctx, request) => {
       temperature: temperature ?? modelConfig.temperature,
       maxTokens: max_tokens ?? modelConfig.maxTokens,
       onFinish: async completion => {
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+
         // Save messages in background
         if (currentThreadId) {
           try {
-            await Promise.all([
-              // Save user message
-              ctx.runMutation(api.services.chat_service.saveMessage, {
-                threadId: currentThreadId,
-                messageId: crypto.randomUUID(),
-                role: 'user',
-                content: messages[messages.length - 1]?.content || '',
-                metadata: {},
-              }),
-              // Save assistant message
+            const promises = [];
+
+            // Save user message
+            if (messages.length > 0) {
+              promises.push(
+                ctx.runMutation(api.services.chat_service.saveMessage, {
+                  threadId: currentThreadId,
+                  messageId: crypto.randomUUID(),
+                  role: 'user',
+                  content: messages[messages.length - 1]?.content || '',
+                  metadata: {},
+                })
+              );
+            }
+
+            // Save assistant message
+            promises.push(
               ctx.runMutation(api.services.chat_service.saveMessage, {
                 threadId: currentThreadId,
                 messageId: completion.response.id || crypto.randomUUID(),
@@ -139,42 +172,23 @@ export const completions = httpAction(async (ctx, request) => {
                   modelName: completion.response.modelId,
                   promptTokens: completion.usage.promptTokens,
                   completionTokens: completion.usage.completionTokens,
+                  contextCompressed,
+                  contextMessageCount: contextMessages.length,
+                  duration,
                 },
-              }),
-              // Update thread activity
+              })
+            );
+
+            // Update thread activity
+            promises.push(
               ctx.runMutation(api.services.chat_service.updateThreadActivity, {
                 threadId: currentThreadId,
-              }),
-            ]);
+              })
+            );
+
+            await Promise.all(promises);
           } catch (dbError) {
             console.error('Database save error:', dbError);
-          }
-        }
-
-        // Generate title in background for new threads
-        if (isNewThread && messages.length >= 1) {
-          const messageTexts = messages
-            .map((msg: any) =>
-              typeof msg.content === 'string' ? msg.content : String(msg.content)
-            )
-            .filter(text => text.trim().length > 0);
-
-          if (messageTexts.length > 0) {
-            ctx
-              .runAction(api.services.chat_service.generateThreadTitle, {
-                messages: messageTexts,
-                modelId: 'gemini-2.5-flash',
-              })
-              .then((titleResult: any) =>
-                ctx.runMutation(api.services.chat_service.updateThreadTitle, {
-                  threadId: currentThreadId,
-                  title: titleResult.title,
-                  category: titleResult.category,
-                })
-              )
-              .catch((error: any) => {
-                console.error('Title generation failed:', error);
-              });
           }
         }
       },
@@ -187,6 +201,8 @@ export const completions = httpAction(async (ctx, request) => {
         'Content-Encoding': 'none',
         'X-Thread-ID': currentThreadId,
         'X-Is-New-Thread': isNewThread.toString(),
+        'X-Context-Compressed': contextCompressed.toString(),
+        'X-Context-Message-Count': contextMessages.length.toString(),
       },
     });
   } catch (error) {
@@ -200,12 +216,12 @@ export const completions = httpAction(async (ctx, request) => {
 
 /**
  * POST /api/chat/generate-title
- * Generate AI-powered conversation titles
+ * Generate AI-powered conversation titles (always uses gemini-2.0-flash)
  */
 export const generateTitle = httpAction(async (ctx, request) => {
   try {
     const body = await parseRequestBody(request);
-    const { clerkId, messages, model = 'gemini-2.5-flash', thread_id } = body;
+    const { clerkId, messages, thread_id } = body;
 
     // Get internal userId from clerkId
     if (!clerkId) {
@@ -230,16 +246,16 @@ export const generateTitle = httpAction(async (ctx, request) => {
             ? msg.content.text
             : String(msg.content || '')
       )
-      .filter(text => text.trim().length > 0)
+      .filter((text: string) => text.trim().length > 0)
       .slice(0, 10);
 
     if (messageTexts.length === 0) {
       return createErrorResponse('No valid message content found', 400);
     }
 
+    // Title generation now always uses gemini-2.0-flash internally
     const result = await ctx.runAction(api.services.chat_service.generateThreadTitle, {
       messages: messageTexts,
-      modelId: model,
     });
 
     // Update thread title if thread_id provided
@@ -247,14 +263,11 @@ export const generateTitle = httpAction(async (ctx, request) => {
       await ctx.runMutation(api.services.chat_service.updateThreadTitle, {
         threadId: thread_id,
         title: result.title,
-        category: result.category,
       });
     }
 
     return createSuccessResponse({
       title: result.title,
-      category: result.category,
-      confidence: result.confidence,
       generatedAt: new Date().toISOString(),
       ...(thread_id && { threadId: thread_id }),
     });
@@ -274,27 +287,16 @@ export const generateTitle = httpAction(async (ctx, request) => {
 export const createThread = httpAction(async (ctx, request) => {
   try {
     const body = await parseRequestBody(request);
-    const { clerkId, title = 'New Chat', description, settings } = body;
+    const { clerkId, title = 'New Chat', description } = body;
 
     // Get internal userId from clerkId
     if (!clerkId) {
       return createErrorResponse('clerkId is required', 400);
     }
 
-    const userId = await getUserIdFromClerkId(ctx, clerkId);
-    if (!userId) {
-      return createErrorResponse('Invalid clerkId or user not found', 401);
-    }
-
     const thread = await ctx.runMutation(api.services.chat_service.createOrGetThread, {
-      userId,
+      clerkId,
       title: title.trim(),
-      settings: {
-        modelId: settings?.modelId || 'gemini-2.5-flash',
-        temperature: settings?.temperature ?? 0.7,
-        maxTokens: settings?.maxTokens ?? 1000,
-        systemPrompt: settings?.systemPrompt,
-      },
     });
 
     return createSuccessResponse(thread);
@@ -331,7 +333,7 @@ export const getThreads = httpAction(async (ctx, request) => {
     const archived = url.searchParams.get('archived') === 'true';
 
     const threads = await ctx.runQuery(api.services.chat_service.getUserThreads, {
-      userId,
+      clerkId,
       limit,
       offset,
       archived,
@@ -383,7 +385,7 @@ export const getMessages = httpAction(async (ctx, request) => {
 
     const messages = await ctx.runQuery(api.services.chat_service.getThreadMessages, {
       threadId: threadId as any,
-      userId,
+      clerkId,
       limit,
       offset,
     });
