@@ -16,7 +16,6 @@ import type {
 import type * as ai from "../ai.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
-import type * as chat_http_index from "../chat_http/index.js";
 import type * as chat_http_middleware from "../chat_http/middleware.js";
 import type * as chat_http_routes_analytics from "../chat_http/routes/analytics.js";
 import type * as chat_http_routes_chat from "../chat_http/routes/chat.js";
@@ -51,7 +50,6 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   analytics: typeof analytics;
   auth: typeof auth;
-  "chat_http/index": typeof chat_http_index;
   "chat_http/middleware": typeof chat_http_middleware;
   "chat_http/routes/analytics": typeof chat_http_routes_analytics;
   "chat_http/routes/chat": typeof chat_http_routes_chat;

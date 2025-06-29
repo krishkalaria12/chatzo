@@ -13,8 +13,11 @@ export const generateConvexApiUrl = (relativePath: string) => {
     baseUrl = baseUrl.replace('.convex.cloud', '.convex.site');
   }
 
-  // Ensure path starts with /
-  const apiPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  // Build final path, ensuring there are no double slashes
+  let apiPath = '';
+  if (relativePath) {
+    apiPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  }
 
   const finalUrl = `${baseUrl}${apiPath}`;
 

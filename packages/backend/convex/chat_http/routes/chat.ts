@@ -39,12 +39,10 @@ export const completions = httpAction(async (ctx, request) => {
       return createErrorResponse('Messages array is required and cannot be empty', 400);
     }
 
-    // Convert to our internal format
-    const httpMessages = messages.map((msg: any) => ({
-      messageId: msg.id || crypto.randomUUID(),
+    // Convert to AI SDK format
+    const aiMessages = messages.map((msg: any) => ({
       role: msg.role,
       content: msg.content,
-      metadata: msg.metadata || {},
     }));
 
     let currentThreadId = thread_id;
@@ -65,57 +63,132 @@ export const completions = httpAction(async (ctx, request) => {
       isNewThread = true;
     }
 
-    // Execute main chat completion
-    const chatResult = await ctx.runAction(api.services.chat_service.completeChatStream, {
-      messages: httpMessages,
-      modelId: model,
-      threadId: currentThreadId,
-      userId,
-      temperature,
-      maxTokens: max_tokens,
-    });
+    // Use AI SDK directly for proper streaming
+    const { streamText } = await import('ai');
+    const { getModelById } = await import('../../config/models');
 
-    // Run title generation in background for new threads or when explicitly requested
-    if ((isNewThread || generate_title) && messages.length >= 1) {
-      const messageTexts = messages
-        .map((msg: any) =>
-          typeof msg.content === 'string'
-            ? msg.content
-            : msg.content?.type === 'text'
-              ? msg.content.text
-              : String(msg.content || '')
-        )
-        .filter(text => text.trim().length > 0);
+    const modelConfig = getModelById(model);
+    if (!modelConfig) {
+      return createErrorResponse(`Unknown model: ${model}`, 400);
+    }
 
-      if (messageTexts.length > 0) {
-        // Run title generation in background - don't await
-        ctx
-          .runAction(api.services.chat_service.generateThreadTitle, {
-            messages: messageTexts,
-            modelId: 'gemini-2.5-flash', // Use faster model for titles
-          })
-          .then((titleResult: any) =>
-            ctx.runMutation(api.services.chat_service.updateThreadTitle, {
-              threadId: currentThreadId,
-              title: titleResult.title,
-              category: titleResult.category,
-            })
-          )
-          .catch((error: any) => {
-            console.error('Title generation failed:', error);
-            // Don't fail the main request if title generation fails
-          });
+    let aiModel;
+    if (modelConfig.provider === 'google') {
+      const { google } = await import('@ai-sdk/google');
+      aiModel = google(modelConfig.id);
+    } else if (modelConfig.provider === 'mistral') {
+      const { mistral } = await import('@ai-sdk/mistral');
+      aiModel = mistral(modelConfig.id);
+    } else {
+      return createErrorResponse(`Unsupported model provider: ${modelConfig.provider}`, 400);
+    }
+
+    // Get existing messages from thread for context
+    let contextMessages = aiMessages;
+    if (currentThreadId && !isNewThread) {
+      try {
+        const existingMessages = await ctx.runQuery(api.services.chat_service.getThreadMessages, {
+          threadId: currentThreadId,
+          userId,
+          limit: 20,
+          offset: 0,
+        });
+
+        // Combine existing + new messages
+        const allMessages = [
+          ...existingMessages.map((msg: any) => ({
+            role: msg.role,
+            content: typeof msg.content === 'string' ? msg.content : String(msg.content),
+          })),
+          ...aiMessages,
+        ];
+
+        contextMessages = allMessages;
+      } catch (error) {
+        console.warn('Failed to get context messages:', error);
+        // Continue with just the new messages
       }
     }
 
-    // Return streaming response with thread metadata
-    const response = chatResult.stream;
+    const result = await streamText({
+      model: aiModel,
+      messages: contextMessages,
+      temperature: temperature ?? modelConfig.temperature,
+      maxTokens: max_tokens ?? modelConfig.maxTokens,
+      onFinish: async completion => {
+        // Save messages in background
+        if (currentThreadId) {
+          try {
+            await Promise.all([
+              // Save user message
+              ctx.runMutation(api.services.chat_service.saveMessage, {
+                threadId: currentThreadId,
+                messageId: crypto.randomUUID(),
+                role: 'user',
+                content: messages[messages.length - 1]?.content || '',
+                metadata: {},
+              }),
+              // Save assistant message
+              ctx.runMutation(api.services.chat_service.saveMessage, {
+                threadId: currentThreadId,
+                messageId: completion.response.id || crypto.randomUUID(),
+                role: 'assistant',
+                content: completion.text,
+                metadata: {
+                  modelId: model,
+                  modelName: completion.response.modelId,
+                  promptTokens: completion.usage.promptTokens,
+                  completionTokens: completion.usage.completionTokens,
+                },
+              }),
+              // Update thread activity
+              ctx.runMutation(api.services.chat_service.updateThreadActivity, {
+                threadId: currentThreadId,
+              }),
+            ]);
+          } catch (dbError) {
+            console.error('Database save error:', dbError);
+          }
+        }
 
-    // Add thread info to headers for client
-    response.headers.set('X-Thread-ID', currentThreadId);
-    response.headers.set('X-Is-New-Thread', isNewThread.toString());
+        // Generate title in background for new threads
+        if (isNewThread && messages.length >= 1) {
+          const messageTexts = messages
+            .map((msg: any) =>
+              typeof msg.content === 'string' ? msg.content : String(msg.content)
+            )
+            .filter(text => text.trim().length > 0);
 
-    return response;
+          if (messageTexts.length > 0) {
+            ctx
+              .runAction(api.services.chat_service.generateThreadTitle, {
+                messages: messageTexts,
+                modelId: 'gemini-2.5-flash',
+              })
+              .then((titleResult: any) =>
+                ctx.runMutation(api.services.chat_service.updateThreadTitle, {
+                  threadId: currentThreadId,
+                  title: titleResult.title,
+                  category: titleResult.category,
+                })
+              )
+              .catch((error: any) => {
+                console.error('Title generation failed:', error);
+              });
+          }
+        }
+      },
+    });
+
+    // Return proper AI SDK streaming response
+    return result.toDataStreamResponse({
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Content-Encoding': 'none',
+        'X-Thread-ID': currentThreadId,
+        'X-Is-New-Thread': isNewThread.toString(),
+      },
+    });
   } catch (error) {
     console.error('Chat completion error:', error);
     return createErrorResponse(

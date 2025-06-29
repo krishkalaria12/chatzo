@@ -1,18 +1,73 @@
-import React, { useEffect } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
-import { useUser, useAuth } from '@clerk/clerk-expo';
-import { useAuthStore } from '@/store/auth-store';
-import { generateConvexApiUrl } from '@/lib/convex-utils';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ScrollView,
+  Text,
+  View,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  TouchableWithoutFeedback,
+  Keyboard,
+  ActivityIndicator,
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useUser } from '@clerk/clerk-expo';
+import { useChat } from '@ai-sdk/react';
+import { fetch as expoFetch } from 'expo/fetch';
 import { AppContainer } from '@/components/app-container';
-import { UserProfile } from '@/components/auth/user-profile';
+import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { ThreadsDrawer } from '@/components/ui/threads-drawer';
+import { TestButton } from '@/components/ui/test-button';
+import { useColorScheme } from '@/lib/use-color-scheme';
+import { chatAPI, Thread } from '@/lib/api/chat-api';
+import { generateConvexApiUrl } from '@/lib/convex-utils';
 
-export default function HomeScreen() {
-  const { user, isLoaded: userLoaded } = useUser();
-  const { isSignedIn, isLoaded: authLoaded } = useAuth();
-  const { setUser: setStoreUser, setSignedIn, setLoading, user: storeUser } = useAuthStore();
+export default function HomePage() {
+  const { user } = useUser();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const { isDarkColorScheme } = useColorScheme();
 
-  // Sync user with Convex when authenticated
-  const syncUserWithConvex = async (userData: any) => {
+  // State management
+  const [currentThread, setCurrentThread] = useState<Thread | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<
+    'untested' | 'testing' | 'success' | 'failed'
+  >('untested');
+
+  // Use AI SDK's useChat hook for proper streaming
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = useChat({
+    fetch: expoFetch as unknown as typeof globalThis.fetch,
+    api: generateConvexApiUrl('/api/chat/completions'),
+    body: {
+      clerkId: user?.id,
+      model: selectedModel,
+      thread_id: currentThread?.id,
+      generate_title: true,
+    },
+    onError: error => {
+      console.error('Chat error:', error);
+      Alert.alert('Chat Error', error.message || 'Unknown error occurred');
+    },
+    onFinish: message => {
+      console.log('Message completed:', message);
+    },
+    initialMessages: [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content:
+          "# Hello! I'm Chatzo 🚀\n\nYour AI assistant powered by **Google Gemini** and **Mistral AI** models. You can select different models using the selector in the input area below.\n\nHow can I help you today?",
+      },
+    ],
+  });
+
+  // Sync user with Convex database
+  const syncUserWithConvex = async () => {
+    if (!user) return;
+
     try {
       const response = await fetch(generateConvexApiUrl('/api/user/sync'), {
         method: 'POST',
@@ -20,110 +75,302 @@ export default function HomeScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          clerkId: userData.clerkId,
-          email: userData.email,
-          name: userData.name,
-          imageUrl: userData.imageUrl,
+          clerkId: user.id,
+          email: user.emailAddresses?.[0]?.emailAddress || '',
+          name: user.fullName || '',
+          imageUrl: user.imageUrl || '',
         }),
       });
 
       if (!response.ok) {
-        console.error('Failed to sync user with Convex:', response.status);
-      } else {
-        const result = await response.json();
-        console.log('User synced successfully:', result);
+        console.warn('User sync failed:', response.status);
       }
     } catch (error) {
-      console.error('Error syncing user with Convex:', error);
+      console.warn('User sync error:', error);
     }
   };
 
-  // Update auth store when Clerk auth state changes
+  // Sync user on component mount
   useEffect(() => {
-    if (authLoaded && userLoaded) {
-      setSignedIn(isSignedIn);
-
-      if (isSignedIn && user) {
-        const storeUser = {
-          id: user.id,
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || '',
-          name: user.fullName || '',
-          imageUrl: user.imageUrl || '',
-        };
-
-        setStoreUser(storeUser);
-
-        // Sync with Convex backend
-        syncUserWithConvex(storeUser);
-      } else {
-        setStoreUser(null);
-      }
-
-      setLoading(false);
+    if (user?.id) {
+      syncUserWithConvex();
     }
-  }, [isSignedIn, user, authLoaded, userLoaded, setStoreUser, setSignedIn, setLoading]);
+  }, [user?.id]);
 
-  if (!authLoaded || !userLoaded) {
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (scrollViewRef.current && messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
+
+  // Test connection
+  const testConnection = async () => {
+    setConnectionStatus('testing');
+    try {
+      const result = await chatAPI.testConnection();
+      setConnectionStatus(result.success ? 'success' : 'failed');
+      Alert.alert(result.success ? 'Success' : 'Failed', result.message);
+    } catch (error) {
+      setConnectionStatus('failed');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Connection test failed');
+    }
+  };
+
+  // Test AI models
+  const testAI = async () => {
+    try {
+      const result = await chatAPI.testAI();
+      if (result.success) {
+        Alert.alert('AI Test Success', `Model: ${result.model}\nResponse: ${result.response}`);
+      } else {
+        Alert.alert('AI Test Failed', result.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'AI test failed');
+    }
+  };
+
+  // Create new thread
+  const createNewThread = async (): Promise<Thread | null> => {
+    if (!user?.id) return null;
+
+    try {
+      await syncUserWithConvex();
+      const thread = await chatAPI.createThread(user.id, 'New Chat', {
+        modelId: selectedModel,
+        temperature: 0.7,
+        maxTokens: 1000,
+      });
+      return thread;
+    } catch (error) {
+      console.error('Failed to create thread:', error);
+      Alert.alert('Error', 'Failed to create new chat');
+      return null;
+    }
+  };
+
+  // Load thread messages
+  const loadThreadMessages = async (threadId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const result = await chatAPI.getThreadMessages(user.id, threadId);
+      // Here you would need to set the messages in useChat - this might need a different approach
+      console.log('Thread messages:', result.messages);
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+      Alert.alert('Error', 'Failed to load conversation history');
+    }
+  };
+
+  // Handle thread selection
+  const handleThreadSelect = (thread: Thread) => {
+    setCurrentThread(thread);
+    setSelectedModel(thread.settings?.modelId || 'gemini-2.5-flash');
+    loadThreadMessages(thread.id);
+  };
+
+  // Handle new thread creation
+  const handleNewThread = () => {
+    setCurrentThread(null);
+    // Reset messages to welcome message - useChat doesn't have a direct way to do this
+    // You might need to use setMessages if available or restart the chat
+  };
+
+  // Custom input handler
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim() || isLoading || !user?.id) return;
+
+    // Create thread if none exists
+    if (!currentThread) {
+      const newThread = await createNewThread();
+      if (newThread) {
+        setCurrentThread(newThread);
+      }
+    }
+
+    // Use AI SDK's append method for proper message handling
+    await append({
+      role: 'user',
+      content: text,
+    });
+  };
+
+  if (error) {
     return (
       <AppContainer>
-        <View className='flex-1 justify-center items-center'>
-          <ActivityIndicator size='large' color='#3B82F6' />
-          <Text className='text-lg mt-4 text-muted-foreground'>Loading...</Text>
+        <View className='flex-1 justify-center items-center p-6'>
+          <Text className='text-red-500 text-center text-lg font-medium mb-4'>Chat Error</Text>
+          <Text className='text-red-400 text-center text-sm mb-4'>
+            {error.message || 'Unknown error occurred'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              // Reset chat state
+              setCurrentThread(null);
+            }}
+            className='mt-4 bg-blue-500 px-4 py-2 rounded-lg'
+          >
+            <Text className='text-white font-medium'>Retry</Text>
+          </TouchableOpacity>
         </View>
       </AppContainer>
     );
   }
 
   return (
-    <AppContainer>
-      <View className='flex-1 p-6'>
-        {/* Header */}
-        <View className='mb-8'>
-          <Text className='text-3xl font-bold text-foreground mb-2'>Welcome to Chatzo! 🎉</Text>
-          <Text className='text-lg text-muted-foreground'>Your AI-powered chat assistant</Text>
-        </View>
+    <AppContainer
+      enableScrollBar={true}
+      scrollBar={{
+        color: isDarkColorScheme ? '#f97316' : '#ea580c',
+        showRail: true,
+      }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className='flex-1'
+        enabled={true}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View className='flex-1'>
+            {/* Header */}
+            <View className='py-4 px-4 border-b border-border bg-background'>
+              <View className='flex-row items-center justify-between mb-2'>
+                <View className='flex-row items-center flex-1'>
+                  {/* Menu button for threads */}
+                  <TouchableOpacity
+                    onPress={() => setIsDrawerOpen(true)}
+                    className='mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800'
+                  >
+                    <MaterialIcons
+                      name='menu'
+                      size={20}
+                      color={isDarkColorScheme ? '#f9fafb' : '#111827'}
+                    />
+                  </TouchableOpacity>
 
-        {/* User Greeting */}
-        {user && (
-          <View className='mb-8'>
-            <Text className='text-xl text-foreground'>
-              Hello, {user.fullName || user.emailAddresses[0]?.emailAddress}! 👋
-            </Text>
-            <Text className='text-muted-foreground mt-1'>Ready to start chatting with AI?</Text>
-          </View>
-        )}
+                  <View className='flex-1'>
+                    <Text className='text-xl font-bold text-black dark:text-white'>
+                      {currentThread?.title || 'Chatzo'}
+                    </Text>
+                    {currentThread && (
+                      <Text className='text-xs text-muted-foreground'>
+                        {currentThread.messageCount} messages •{' '}
+                        {currentThread.settings?.modelId || 'AI'}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <ThemeToggle />
+              </View>
 
-        {/* User Profile Card */}
-        <View className='flex-1 justify-center'>
-          <UserProfile />
-        </View>
-
-        {/* Quick Stats */}
-        <View className='mt-8 bg-card rounded-xl p-4 border border-border'>
-          <Text className='text-lg font-semibold text-foreground mb-4'>Quick Stats</Text>
-          <View className='flex-row justify-between'>
-            <View className='items-center'>
-              <Text className='text-2xl font-bold text-primary'>0</Text>
-              <Text className='text-xs text-muted-foreground'>Chats</Text>
-            </View>
-            <View className='items-center'>
-              <Text className='text-2xl font-bold text-primary'>0</Text>
-              <Text className='text-xs text-muted-foreground'>Messages</Text>
-            </View>
-            <View className='items-center'>
-              <Text className='text-2xl font-bold text-primary'>
-                {user?.createdAt
-                  ? Math.floor(
-                      (Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-                    )
-                  : 0}
+              <Text className='text-sm text-muted-foreground mb-2'>
+                AI Assistant powered by Google Gemini & Mistral AI • Streaming enabled
               </Text>
-              <Text className='text-xs text-muted-foreground'>Days</Text>
+
+              {/* Connection Test Buttons */}
+              <View className='flex-row space-x-2'>
+                <TouchableOpacity
+                  onPress={testConnection}
+                  className='px-3 py-1 rounded-md bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700'
+                >
+                  <Text className='text-xs font-medium text-green-700 dark:text-green-300'>
+                    Test Convex ({connectionStatus})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={testAI}
+                  className='px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
+                >
+                  <Text className='text-xs font-medium text-blue-700 dark:text-blue-300'>
+                    Test AI Models
+                  </Text>
+                </TouchableOpacity>
+
+                <TestButton onSuccess={() => console.log('All tests passed!')} />
+              </View>
+            </View>
+
+            {/* Messages */}
+            <ScrollView
+              ref={scrollViewRef}
+              className='flex-1 px-4 bg-background'
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 16 }}
+            >
+              {messages.map(message => (
+                <View
+                  key={message.id}
+                  className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+                >
+                  <View
+                    className={`max-w-[85%] p-3 rounded-2xl ${
+                      message.role === 'user'
+                        ? 'bg-blue-500 rounded-br-md'
+                        : 'bg-gray-100 dark:bg-gray-800 rounded-bl-md'
+                    }`}
+                  >
+                    <Text
+                      className={`text-base leading-relaxed ${
+                        message.role === 'user' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
+                      {message.content}
+                    </Text>
+                  </View>
+                  <Text
+                    className={`text-xs text-muted-foreground mt-1 px-1 ${
+                      message.role === 'user' ? 'text-right' : 'text-left'
+                    }`}
+                  >
+                    {message.role === 'user' ? 'You' : 'AI Assistant'}
+                  </Text>
+                </View>
+              ))}
+
+              {isLoading && (
+                <View className='items-start mb-4'>
+                  <View className='bg-gray-100 dark:bg-gray-800 p-3 rounded-2xl rounded-bl-md'>
+                    <View className='flex-row items-center'>
+                      <Text className='text-gray-600 dark:text-gray-300 text-base mr-2'>
+                        AI is thinking
+                      </Text>
+                      <View className='flex-row'>
+                        <Text className='text-gray-400 animate-pulse'>●</Text>
+                        <Text className='text-gray-400 animate-pulse ml-1'>●</Text>
+                        <Text className='text-gray-400 animate-pulse ml-1'>●</Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Auto Resizing Input */}
+            <View style={{ paddingBottom: Platform.OS === 'ios' ? 10 : 20 }}>
+              <AutoResizingInput
+                onSend={handleSendMessage}
+                placeholder='Type your message...'
+                selectedModel={selectedModel}
+                onModelChange={setSelectedModel}
+              />
             </View>
           </View>
-        </View>
-      </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+
+      {/* Threads Drawer */}
+      <ThreadsDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onThreadSelect={handleThreadSelect}
+        currentThreadId={currentThread?.id}
+        onNewThread={handleNewThread}
+      />
     </AppContainer>
   );
 }

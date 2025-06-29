@@ -1,20 +1,33 @@
-import { useSignIn } from '@clerk/clerk-expo';
+import { useSignIn, useAuth } from '@clerk/clerk-expo';
 import { Link, useRouter } from 'expo-router';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
-import React from 'react';
+import { Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
+import React, { useEffect } from 'react';
 
 export const SignInForm = () => {
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { isSignedIn } = useAuth();
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = React.useState('');
   const [password, setPassword] = React.useState('');
 
+  // If user is already signed in, redirect to home
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace('/(home)');
+    }
+  }, [isSignedIn, router]);
+
   // Handle the submission of the sign-in form
   const onSignInPress = async () => {
     if (!isLoaded) return;
 
-    // Start the sign-in process using the email and password provided
+    // Check if user is already signed in
+    if (isSignedIn) {
+      router.replace('/(home)');
+      return;
+    }
+
     try {
       const signInAttempt = await signIn.create({
         identifier: emailAddress,
@@ -29,14 +42,28 @@ export const SignInForm = () => {
       } else {
         // If the status isn't complete, check why. User might need to
         // complete further steps.
-        console.error(JSON.stringify(signInAttempt, null, 2));
+        console.error('Sign-in incomplete:', JSON.stringify(signInAttempt, null, 2));
+        Alert.alert('Sign In Error', 'Please complete the sign-in process');
       }
-    } catch (err) {
-      // See https://clerk.com/docs/custom-flows/error-handling
-      // for more info on error handling
-      console.error(JSON.stringify(err, null, 2));
+    } catch (err: any) {
+      console.error('Sign-in error:', JSON.stringify(err, null, 2));
+
+      // Handle specific Clerk errors
+      if (err.errors?.[0]?.code === 'session_exists') {
+        // Session already exists, redirect to home
+        router.replace('/(home)');
+      } else if (err.errors?.[0]?.message) {
+        Alert.alert('Sign In Error', err.errors[0].message);
+      } else {
+        Alert.alert('Sign In Error', 'Failed to sign in. Please try again.');
+      }
     }
   };
+
+  // Don't render if user is already signed in
+  if (isSignedIn) {
+    return null;
+  }
 
   return (
     <View>

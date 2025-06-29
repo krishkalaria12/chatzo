@@ -436,3 +436,234 @@ export const trackUsage = mutation({
     });
   },
 });
+
+/**
+ * Intelligent context compression for long conversations
+ */
+const compressConversationContext = async (
+  ctx: any,
+  threadId: string,
+  newMessages: any[],
+  maxTokens: number = 4000
+) => {
+  try {
+    // Get existing messages from database
+    const existingMessages = await ctx.db
+      .query('messages')
+      .withIndex('by_thread_created', (q: any) => q.eq('threadId', threadId))
+      .order('asc')
+      .collect();
+
+    // Combine existing + new messages
+    const allMessages = [
+      ...existingMessages.map((msg: any) => ({
+        role: msg.role,
+        content:
+          typeof msg.content === 'string' ? msg.content : msg.content?.text || String(msg.content),
+      })),
+      ...newMessages.map((msg: any) => ({
+        role: msg.role,
+        content:
+          typeof msg.content === 'string' ? msg.content : msg.content?.text || String(msg.content),
+      })),
+    ];
+
+    // If conversation is short, return as-is
+    if (allMessages.length <= 10) {
+      return allMessages;
+    }
+
+    // Estimate tokens (rough: 4 chars per token)
+    const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+
+    // Always preserve system messages and recent messages
+    const systemMessages = allMessages.filter(m => m.role === 'system');
+    const conversationMessages = allMessages.filter(m => m.role !== 'system');
+    const recentMessages = conversationMessages.slice(-6); // Last 6 messages
+
+    let compressed = [...systemMessages, ...recentMessages];
+    let totalTokens = compressed.reduce((sum, msg) => sum + estimateTokens(msg.content), 0);
+
+    // Add older messages if they fit
+    const olderMessages = conversationMessages.slice(0, -6);
+    for (let i = olderMessages.length - 1; i >= 0; i--) {
+      const msg = olderMessages[i];
+      const msgTokens = estimateTokens(msg.content);
+
+      if (totalTokens + msgTokens <= maxTokens * 0.8) {
+        // Leave 20% buffer
+        compressed.splice(-6, 0, msg); // Insert before recent messages
+        totalTokens += msgTokens;
+      } else {
+        break;
+      }
+    }
+
+    // If we removed many messages, create a summary
+    if (allMessages.length - compressed.length > 8) {
+      const { generateText } = await import('ai');
+      const { google } = await import('@ai-sdk/google');
+
+      try {
+        const summaryContent = olderMessages
+          .slice(0, 10)
+          .map(m => `${m.role}: ${m.content.slice(0, 100)}...`)
+          .join('\n');
+
+        const summary = await generateText({
+          model: google('gemini-2.5-flash'),
+          prompt: `Summarize this conversation context in 2-3 sentences to preserve important details:\n\n${summaryContent}`,
+          maxTokens: 100,
+          temperature: 0.3,
+        });
+
+        const summaryMessage = {
+          role: 'system' as const,
+          content: `[Previous conversation summary: ${summary.text}]`,
+        };
+
+        return [summaryMessage, ...compressed.filter(m => m.role !== 'system')];
+      } catch (error) {
+        console.error('Summary generation failed:', error);
+        // Fallback to simple summary
+        const summaryMessage = {
+          role: 'system' as const,
+          content: `[Previous conversation with ${allMessages.length - compressed.length} earlier messages omitted for context length]`,
+        };
+
+        return [summaryMessage, ...compressed.filter(m => m.role !== 'system')];
+      }
+    }
+
+    return compressed;
+  } catch (error) {
+    console.error('Context compression error:', error);
+    // Fallback: return recent messages only
+    return newMessages.slice(-5);
+  }
+};
+
+/**
+ * Enhanced chat completion with automatic context management
+ */
+export const completeChatWithContext = action({
+  args: {
+    messages: v.array(HTTPAIMessage),
+    modelId: v.string(),
+    threadId: v.id('threads'),
+    userId: v.string(),
+    temperature: v.optional(v.number()),
+    maxTokens: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { messages, modelId, threadId, userId, temperature, maxTokens } = args;
+
+    try {
+      // Get compressed context including database history
+      const compressedMessages = await compressConversationContext(
+        ctx,
+        threadId,
+        messages,
+        maxTokens || 4000
+      );
+
+      // Continue with existing chat completion logic using compressed messages
+      const { streamText } = await import('ai');
+      const { getModelById } = await import('../config/models');
+
+      const modelConfig = getModelById(modelId);
+      if (!modelConfig) {
+        throw new ConvexError(`Unknown model: ${modelId}`);
+      }
+
+      let model;
+      if (modelConfig.provider === 'google') {
+        const { google } = await import('@ai-sdk/google');
+        model = google(modelConfig.id);
+      } else if (modelConfig.provider === 'mistral') {
+        const { mistral } = await import('@ai-sdk/mistral');
+        model = mistral(modelConfig.id);
+      } else {
+        throw new ConvexError(`Unsupported model provider: ${modelConfig.provider as string}`);
+      }
+
+      const startTime = Date.now();
+
+      const result = await streamText({
+        model,
+        messages: compressedMessages,
+        temperature: temperature ?? modelConfig.temperature,
+        maxTokens: maxTokens ?? modelConfig.maxTokens,
+        onFinish: async completion => {
+          const endTime = Date.now();
+          const duration = endTime - startTime;
+
+          // Save only the new user message and AI response
+          try {
+            await Promise.all([
+              // Save new user message
+              ctx.runMutation(api.services.chat_service.saveMessage, {
+                threadId,
+                messageId: messages.find(m => m.role === 'user')?.messageId || crypto.randomUUID(),
+                role: 'user',
+                content: messages.find(m => m.role === 'user')?.content || '',
+                metadata: {},
+              }),
+              // Save assistant response
+              ctx.runMutation(api.services.chat_service.saveMessage, {
+                threadId,
+                messageId: completion.response.id || crypto.randomUUID(),
+                role: 'assistant',
+                content: completion.text,
+                metadata: {
+                  modelId,
+                  modelName: completion.response.modelId,
+                  promptTokens: completion.usage.promptTokens,
+                  completionTokens: completion.usage.completionTokens,
+                  serverDurationMs: duration,
+                  temperature: temperature ?? modelConfig.temperature,
+                  maxTokens: maxTokens ?? modelConfig.maxTokens,
+                  contextCompressed: compressedMessages.length < messages.length + 5, // Indicate if context was compressed
+                },
+              }),
+              // Update thread activity
+              ctx.runMutation(api.services.chat_service.updateThreadActivity, {
+                threadId,
+              }),
+              // Track usage
+              ctx.runMutation(api.services.chat_service.trackUsage, {
+                userId,
+                threadId,
+                messageId: completion.response.id || crypto.randomUUID(),
+                modelId,
+                modelName: completion.response.modelId,
+                promptTokens: completion.usage.promptTokens,
+                completionTokens: completion.usage.completionTokens,
+                totalTokens: completion.usage.totalTokens,
+                cost: 0,
+                duration,
+                status: 'success',
+              }),
+            ]);
+          } catch (dbError) {
+            console.error('Database save error:', dbError);
+          }
+        },
+      });
+
+      return {
+        stream: result.toTextStreamResponse(),
+        messageId: crypto.randomUUID(),
+        contextInfo: {
+          totalMessages: compressedMessages.length,
+          compressed: compressedMessages.length < messages.length + 5,
+        },
+      };
+    } catch (error) {
+      console.error('Chat completion with context error:', error);
+      throw new ConvexError(
+        `Chat completion failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  },
+});
