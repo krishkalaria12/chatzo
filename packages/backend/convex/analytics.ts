@@ -9,11 +9,11 @@ const getUserByClerkId = async (ctx: any, clerkId: string) => {
     .query('users')
     .withIndex('by_clerk_id', (q: any) => q.eq('clerkId', clerkId))
     .unique();
-  
+
   if (!user) {
     throw new ConvexError('User not found');
   }
-  
+
   return user;
 };
 
@@ -44,19 +44,17 @@ export const getUserUsageStats = query({
     // Calculate totals
     const totalRequests = usageEvents.length;
     const totalTokens = usageEvents.reduce((sum, event) => sum + (event.totalTokens || 0), 0);
-    const totalCost = usageEvents.reduce((sum, event) => sum + (event.cost || 0), 0);
 
     // Group by date for daily usage
-    const dailyUsageMap = new Map<string, { requests: number; tokens: number; cost: number }>();
+    const dailyUsageMap = new Map<string, { requests: number; tokens: number }>();
 
     usageEvents.forEach(event => {
       const date = new Date(event.timestamp).toISOString().split('T')[0];
-      const existing = dailyUsageMap.get(date) || { requests: 0, tokens: 0, cost: 0 };
+      const existing = dailyUsageMap.get(date) || { requests: 0, tokens: 0 };
 
       dailyUsageMap.set(date, {
         requests: existing.requests + 1,
         tokens: existing.tokens + (event.totalTokens || 0),
-        cost: existing.cost + (event.cost || 0),
       });
     });
 
@@ -68,19 +66,17 @@ export const getUserUsageStats = query({
       const date = new Date(endDate.getTime() - i * 24 * 60 * 60 * 1000)
         .toISOString()
         .split('T')[0];
-      const usage = dailyUsageMap.get(date) || { requests: 0, tokens: 0, cost: 0 };
+      const usage = dailyUsageMap.get(date) || { requests: 0, tokens: 0 };
       dailyUsage.unshift({
         date,
         requests: usage.requests,
         tokens: usage.tokens,
-        cost: Number(usage.cost.toFixed(4)),
       });
     }
 
     return {
       totalRequests,
       totalTokens,
-      totalCost: Number(totalCost.toFixed(4)),
       period: `Last ${days} days`,
       dailyUsage,
       averageRequestsPerDay: Number((totalRequests / days).toFixed(2)),
@@ -121,7 +117,6 @@ export const getModelUsageStats = query({
         modelName: string;
         requests: number;
         totalTokens: number;
-        totalCost: number;
       }
     >();
 
@@ -133,20 +128,17 @@ export const getModelUsageStats = query({
         modelName,
         requests: 0,
         totalTokens: 0,
-        totalCost: 0,
       };
 
       modelUsageMap.set(modelId, {
         ...existing,
         requests: existing.requests + 1,
         totalTokens: existing.totalTokens + (event.totalTokens || 0),
-        totalCost: existing.totalCost + (event.cost || 0),
       });
     });
 
     // Calculate totals for percentages
     const totalRequests = usageEvents.length;
-    const totalCost = usageEvents.reduce((sum, event) => sum + (event.cost || 0), 0);
 
     // Convert to array and add percentages
     const modelUsage = Array.from(modelUsageMap.values())
@@ -154,11 +146,8 @@ export const getModelUsageStats = query({
         ...model,
         averageTokensPerRequest:
           model.requests > 0 ? Math.round(model.totalTokens / model.requests) : 0,
-        totalCost: Number(model.totalCost.toFixed(4)),
         requestsPercentage:
           totalRequests > 0 ? Number(((model.requests / totalRequests) * 100).toFixed(1)) : 0,
-        costPercentage:
-          totalCost > 0 ? Number(((model.totalCost / totalCost) * 100).toFixed(1)) : 0,
       }))
       .sort((a, b) => b.requests - a.requests); // Sort by request count descending
 

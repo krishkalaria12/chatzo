@@ -194,7 +194,6 @@ export const completions = httpAction(async (ctx, request) => {
                 promptTokens: completion.usage.promptTokens || 0,
                 completionTokens: completion.usage.completionTokens || 0,
                 totalTokens: completion.usage.totalTokens || 0,
-                cost: 0, // TODO: Calculate actual cost based on model pricing
                 duration,
                 status: 'success',
               })
@@ -220,7 +219,6 @@ export const completions = httpAction(async (ctx, request) => {
               promptTokens: 0,
               completionTokens: 0,
               totalTokens: 0,
-              cost: 0,
               duration,
               status: 'error',
               errorMessage: error instanceof Error ? error.message : 'Unknown error',

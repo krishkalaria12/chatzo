@@ -405,7 +405,6 @@ export const trackUsage = mutation({
     promptTokens: v.number(),
     completionTokens: v.number(),
     totalTokens: v.number(),
-    cost: v.optional(v.number()),
     duration: v.optional(v.number()),
     status: v.union(
       v.literal('success'),

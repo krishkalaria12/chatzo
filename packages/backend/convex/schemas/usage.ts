@@ -10,7 +10,6 @@ export const UsageEvent = v.object({
   promptTokens: v.number(), // p -> promptTokens
   completionTokens: v.number(), // c -> completionTokens
   totalTokens: v.number(),
-  cost: v.optional(v.number()), // Cost in USD
   duration: v.optional(v.number()), // Duration in milliseconds
   timestamp: v.number(),
   daysSinceEpoch: v.number(), // Math.floor(Date.now() / (24*60*60*1000))
@@ -34,13 +33,11 @@ export const DailyUsageSummary = v.object({
       requestCount: v.number(),
       totalPromptTokens: v.number(),
       totalCompletionTokens: v.number(),
-      totalCost: v.number(),
       averageDuration: v.number(),
     })
   ),
   totalRequests: v.number(),
   totalTokens: v.number(),
-  totalCost: v.number(),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
