@@ -152,7 +152,6 @@ export const completions = httpAction(async (ctx, request) => {
               promises.push(
                 ctx.runMutation(api.services.chat_service.saveMessage, {
                   threadId: currentThreadId,
-                  messageId: crypto.randomUUID(),
                   role: 'user',
                   content: messages[messages.length - 1]?.content || '',
                   metadata: {},
@@ -164,7 +163,6 @@ export const completions = httpAction(async (ctx, request) => {
             promises.push(
               ctx.runMutation(api.services.chat_service.saveMessage, {
                 threadId: currentThreadId,
-                messageId: completion.response.id || crypto.randomUUID(),
                 role: 'assistant',
                 content: completion.text,
                 metadata: {
@@ -392,7 +390,7 @@ export const getMessages = httpAction(async (ctx, request) => {
 
     return createSuccessResponse({
       messages: messages.map((msg: any) => ({
-        id: msg.messageId,
+        id: msg._id,
         role: msg.role,
         content: msg.content,
         metadata: msg.metadata,

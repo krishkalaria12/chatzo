@@ -35,7 +35,6 @@ export const MessageMetadata = v.object({
 
 // HTTP AI Message (for API requests/responses)
 export const HTTPAIMessage = v.object({
-  messageId: v.optional(v.string()),
   role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
   content: MessageContent,
   metadata: v.optional(MessageMetadata),
@@ -43,7 +42,6 @@ export const HTTPAIMessage = v.object({
 
 // AI Message (internal processing)
 export const AIMessage = v.object({
-  messageId: v.string(),
   role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
   content: MessageContent,
   createdAt: v.number(),
@@ -54,7 +52,6 @@ export const AIMessage = v.object({
 // Database Message (stored in Convex)
 export const Message = v.object({
   threadId: v.id('threads'),
-  messageId: v.string(),
   role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
   content: MessageContent,
   createdAt: v.number(),

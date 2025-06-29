@@ -18,10 +18,10 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { ThreadsDrawer } from '@/components/ui/threads-drawer';
+import { ThreadsDrawer, ThreadsDrawerRef } from '@/components/ui/threads-drawer';
 import { TestButton } from '@/components/ui/test-button';
 import { useColorScheme } from '@/lib/use-color-scheme';
-import { chatAPI, Thread } from '@/lib/api/chat-api';
+import { chatAPI, Thread, Message } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 
 export default function HomePage() {
@@ -36,9 +36,20 @@ export default function HomePage() {
   const [connectionStatus, setConnectionStatus] = useState<
     'untested' | 'testing' | 'success' | 'failed'
   >('untested');
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  // Use AI SDK's useChat hook for proper streaming
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, append } = useChat({
+  // Use AI SDK's useChat hook with proper configuration
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    error,
+    append,
+    setMessages,
+    reload,
+  } = useChat({
     fetch: expoFetch as unknown as typeof globalThis.fetch,
     api: generateConvexApiUrl('/api/chat/completions'),
     body: {
@@ -51,8 +62,15 @@ export default function HomePage() {
       console.error('Chat error:', error);
       Alert.alert('Chat Error', error.message || 'Unknown error occurred');
     },
-    onFinish: message => {
-      console.log('Message completed:', message);
+    onFinish: (message, { usage, finishReason }) => {
+      console.log('Message completed:', { message, usage, finishReason });
+
+      // Refresh thread list to show updated titles
+      // This will be triggered when the backend updates the title
+      setTimeout(() => {
+        refreshThreadsList();
+        refreshCurrentThread();
+      }, 1500); // Small delay to allow backend title generation to complete
     },
     initialMessages: [
       {
@@ -63,6 +81,9 @@ export default function HomePage() {
       },
     ],
   });
+
+  // Ref to store the drawer refresh function
+  const threadsDrawerRef = useRef<ThreadsDrawerRef>(null);
 
   // Sync user with Convex database
   const syncUserWithConvex = async () => {
@@ -152,32 +173,79 @@ export default function HomePage() {
     }
   };
 
-  // Load thread messages
+  // Load thread messages and set them in useChat
   const loadThreadMessages = async (threadId: string) => {
     if (!user?.id) return;
 
+    setIsLoadingMessages(true);
     try {
       const result = await chatAPI.getThreadMessages(user.id, threadId);
-      // Here you would need to set the messages in useChat - this might need a different approach
-      console.log('Thread messages:', result.messages);
+
+      // Convert API messages to useChat format
+      const formattedMessages = result.messages.map((msg: any) => ({
+        id: msg._id,
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt ? new Date(msg.createdAt) : undefined,
+      }));
+
+      // Set messages in useChat hook
+      setMessages(formattedMessages);
     } catch (error) {
       console.error('Failed to load messages:', error);
       Alert.alert('Error', 'Failed to load conversation history');
+    } finally {
+      setIsLoadingMessages(false);
     }
   };
 
+  // Refresh current thread data to get updated title
+  const refreshCurrentThread = async () => {
+    if (!currentThread?.id || !user?.id) return;
+
+    try {
+      const threadsResponse = await fetch(
+        generateConvexApiUrl(`/api/chat/threads?clerkId=${user.id}&limit=1`)
+      );
+      const threadsData = await threadsResponse.json();
+
+      const updatedThread = threadsData.threads?.find((t: Thread) => t.id === currentThread.id);
+      if (updatedThread && updatedThread.title !== currentThread.title) {
+        setCurrentThread(updatedThread);
+        console.log('Thread title updated:', updatedThread.title);
+      }
+    } catch (error) {
+      console.warn('Failed to refresh current thread:', error);
+    }
+  };
+
+  // Refresh threads list (for drawer)
+  const refreshThreadsList = () => {
+    threadsDrawerRef.current?.refreshThreads();
+  };
+
   // Handle thread selection
-  const handleThreadSelect = (thread: Thread) => {
+  const handleThreadSelect = async (thread: Thread) => {
     setCurrentThread(thread);
     setSelectedModel(thread.settings?.modelId || 'gemini-2.5-flash');
-    loadThreadMessages(thread.id);
+
+    // Load messages for the selected thread
+    await loadThreadMessages(thread.id);
   };
 
   // Handle new thread creation
   const handleNewThread = () => {
     setCurrentThread(null);
-    // Reset messages to welcome message - useChat doesn't have a direct way to do this
-    // You might need to use setMessages if available or restart the chat
+
+    // Reset to welcome message
+    setMessages([
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content:
+          "# Hello! I'm Chatzo 🚀\n\nYour AI assistant powered by **Google Gemini** and **Mistral AI** models. You can select different models using the selector in the input area below.\n\nHow can I help you today?",
+      },
+    ]);
   };
 
   // Custom input handler
@@ -210,7 +278,7 @@ export default function HomePage() {
           <TouchableOpacity
             onPress={() => {
               // Reset chat state
-              setCurrentThread(null);
+              handleNewThread();
             }}
             className='mt-4 bg-blue-500 px-4 py-2 rounded-lg'
           >
@@ -254,12 +322,12 @@ export default function HomePage() {
 
                   <View className='flex-1'>
                     <Text className='text-xl font-bold text-black dark:text-white'>
-                      {currentThread?.title || 'Chatzo'}
+                      {currentThread?.title || 'New Chat'}
                     </Text>
                     {currentThread && (
                       <Text className='text-xs text-muted-foreground'>
                         {currentThread.messageCount} messages •{' '}
-                        {currentThread.settings?.modelId || 'AI'}
+                        {currentThread.settings?.modelId || selectedModel}
                       </Text>
                     )}
                   </View>
@@ -268,7 +336,8 @@ export default function HomePage() {
               </View>
 
               <Text className='text-sm text-muted-foreground mb-2'>
-                AI Assistant powered by Google Gemini & Mistral AI • Streaming enabled
+                AI Assistant powered by Google Gemini & Mistral AI • Latest AI SDK • Streaming
+                enabled
               </Text>
 
               {/* Connection Test Buttons */}
@@ -302,6 +371,18 @@ export default function HomePage() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingVertical: 16 }}
             >
+              {isLoadingMessages && (
+                <View className='items-center mb-4'>
+                  <ActivityIndicator
+                    size='small'
+                    color={isDarkColorScheme ? '#3b82f6' : '#2563eb'}
+                  />
+                  <Text className='text-xs text-muted-foreground mt-2'>
+                    Loading conversation...
+                  </Text>
+                </View>
+              )}
+
               {messages.map(message => (
                 <View
                   key={message.id}
@@ -370,6 +451,7 @@ export default function HomePage() {
         onThreadSelect={handleThreadSelect}
         currentThreadId={currentThread?.id}
         onNewThread={handleNewThread}
+        ref={threadsDrawerRef}
       />
     </AppContainer>
   );

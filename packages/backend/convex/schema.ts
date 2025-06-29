@@ -36,7 +36,6 @@ export default defineSchema({
   messages: defineTable(Message)
     .index('by_thread_id', ['threadId'])
     .index('by_thread_created', ['threadId', 'createdAt'])
-    .index('by_message_id', ['messageId'])
     .index('by_thread_role', ['threadId', 'role']),
 
   // Usage events for tracking AI model usage

@@ -356,7 +356,6 @@ export const getThreadMessages = query({
 export const saveMessage = mutation({
   args: {
     threadId: v.id('threads'),
-    messageId: v.string(),
     role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
     content: v.any(),
     metadata: v.any(),

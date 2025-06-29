@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useColorScheme } from '@/lib/use-color-scheme';
@@ -14,210 +14,231 @@ interface ThreadsDrawerProps {
   onNewThread: () => void;
 }
 
-export const ThreadsDrawer: React.FC<ThreadsDrawerProps> = ({
-  isOpen,
-  onClose,
-  onThreadSelect,
-  currentThreadId,
-  onNewThread,
-}) => {
-  const { isDarkColorScheme } = useColorScheme();
-  const { user } = useAuthStore();
-  const [threads, setThreads] = useState<Thread[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+interface ThreadsDrawerRef {
+  refreshThreads: () => void;
+}
 
-  const colors = {
-    background: isDarkColorScheme ? '#1f2937' : '#ffffff',
-    surface: isDarkColorScheme ? '#374151' : '#f3f4f6',
-    border: isDarkColorScheme ? '#4b5563' : '#e5e7eb',
-    text: isDarkColorScheme ? '#f9fafb' : '#111827',
-    textMuted: isDarkColorScheme ? '#9ca3af' : '#6b7280',
-    primary: isDarkColorScheme ? '#3b82f6' : '#2563eb',
-    overlay: 'rgba(0, 0, 0, 0.5)',
-  };
+export const ThreadsDrawer = forwardRef<ThreadsDrawerRef, ThreadsDrawerProps>(
+  ({ isOpen, onClose, onThreadSelect, currentThreadId, onNewThread }, ref) => {
+    const { isDarkColorScheme } = useColorScheme();
+    const { user } = useAuthStore();
+    const [threads, setThreads] = useState<Thread[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-  // Load threads
-  const loadThreads = async () => {
-    if (!user?.clerkId) return;
+    const colors = {
+      background: isDarkColorScheme ? '#1f2937' : '#ffffff',
+      surface: isDarkColorScheme ? '#374151' : '#f3f4f6',
+      border: isDarkColorScheme ? '#4b5563' : '#e5e7eb',
+      text: isDarkColorScheme ? '#f9fafb' : '#111827',
+      textMuted: isDarkColorScheme ? '#9ca3af' : '#6b7280',
+      primary: isDarkColorScheme ? '#3b82f6' : '#2563eb',
+      overlay: 'rgba(0, 0, 0, 0.5)',
+    };
 
-    setLoading(true);
-    setError(null);
+    // Load threads function
+    const loadThreads = async () => {
+      if (!user?.clerkId) return;
 
-    try {
-      const url = generateConvexApiUrl(`/api/chat/threads?clerkId=${user.clerkId}&limit=30`);
-      const response = await fetch(url);
-      const data = await response.json();
+      setLoading(true);
+      setError(null);
 
-      if (response.ok) {
-        setThreads(data.threads || []);
-      } else {
-        setError(data.error?.message || 'Failed to load threads');
+      try {
+        const url = generateConvexApiUrl(`/api/chat/threads?clerkId=${user.clerkId}&limit=30`);
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (response.ok) {
+          setThreads(data.threads || []);
+          console.log('Threads loaded:', data.threads?.length || 0);
+        } else {
+          setError(data.error?.message || 'Failed to load threads');
+        }
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Failed to load threads');
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to load threads');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  useEffect(() => {
-    if (isOpen) {
-      loadThreads();
-    }
-  }, [isOpen, user?.clerkId]);
+    // Expose refresh function via ref
+    useImperativeHandle(ref, () => ({
+      refreshThreads: loadThreads,
+    }));
 
-  // Format date
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    useEffect(() => {
+      if (isOpen) {
+        loadThreads();
+      }
+    }, [isOpen, user?.clerkId]);
 
-    if (diffHours < 1) {
-      return 'Just now';
-    } else if (diffHours < 24) {
-      return `${Math.floor(diffHours)}h ago`;
-    } else if (diffDays < 7) {
-      return `${Math.floor(diffDays)}d ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
-  };
+    // Format date
+    const formatDate = (timestamp: number) => {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-  if (!isOpen) return null;
+      if (diffHours < 1) {
+        return 'Just now';
+      } else if (diffHours < 24) {
+        return `${Math.floor(diffHours)}h ago`;
+      } else if (diffDays < 7) {
+        return `${Math.floor(diffDays)}d ago`;
+      } else {
+        return date.toLocaleDateString();
+      }
+    };
 
-  return (
-    <View className='absolute inset-0 z-50'>
-      {/* Overlay */}
-      <TouchableOpacity
-        className='absolute inset-0'
-        style={{ backgroundColor: colors.overlay }}
-        onPress={onClose}
-        activeOpacity={1}
-      />
+    if (!isOpen) return null;
 
-      {/* Drawer */}
-      <View
-        className='absolute left-0 top-0 bottom-0 w-80'
-        style={{ backgroundColor: colors.background }}
-      >
-        {/* Header */}
+    return (
+      <View className='absolute inset-0 z-50'>
+        {/* Overlay */}
+        <TouchableOpacity
+          className='absolute inset-0'
+          style={{ backgroundColor: colors.overlay }}
+          onPress={onClose}
+          activeOpacity={1}
+        />
+
+        {/* Drawer */}
         <View
-          className='flex-row items-center justify-between p-4 border-b'
-          style={{ borderColor: colors.border }}
+          className='absolute left-0 top-0 bottom-0 w-80'
+          style={{ backgroundColor: colors.background }}
         >
-          <Text className='text-lg font-semibold' style={{ color: colors.text }}>
-            Chat History
-          </Text>
-          <TouchableOpacity onPress={onClose} className='p-1'>
-            <MaterialIcons name='close' size={24} color={colors.textMuted} />
-          </TouchableOpacity>
-        </View>
-
-        {/* New Chat Button */}
-        <View className='p-4 border-b' style={{ borderColor: colors.border }}>
-          <TouchableOpacity
-            onPress={() => {
-              onNewThread();
-              onClose();
-            }}
-            className='flex-row items-center justify-center p-3 rounded-lg'
-            style={{ backgroundColor: colors.primary }}
+          {/* Header */}
+          <View
+            className='flex-row items-center justify-between p-4 border-b'
+            style={{ borderColor: colors.border }}
           >
-            <MaterialIcons name='add' size={20} color='white' />
-            <Text className='text-white font-medium ml-2'>New Chat</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Threads List */}
-        <ScrollView className='flex-1 p-4'>
-          {loading ? (
-            <View className='flex-1 justify-center items-center py-8'>
-              <ActivityIndicator size='large' color={colors.primary} />
-              <Text className='text-sm mt-2' style={{ color: colors.textMuted }}>
-                Loading threads...
+            <View className='flex-row items-center'>
+              <Text className='text-lg font-semibold' style={{ color: colors.text }}>
+                Chat History
               </Text>
-            </View>
-          ) : error ? (
-            <View className='flex-1 justify-center items-center py-8'>
-              <MaterialIcons name='error-outline' size={32} color={colors.textMuted} />
-              <Text className='text-sm mt-2 text-center' style={{ color: colors.textMuted }}>
-                {error}
-              </Text>
-              <TouchableOpacity
-                onPress={loadThreads}
-                className='mt-4 px-4 py-2 rounded-lg'
-                style={{ backgroundColor: colors.surface }}
-              >
-                <Text className='text-sm font-medium' style={{ color: colors.text }}>
-                  Retry
-                </Text>
+              {/* Refresh button */}
+              <TouchableOpacity onPress={loadThreads} className='ml-2 p-1' disabled={loading}>
+                <MaterialIcons
+                  name='refresh'
+                  size={20}
+                  color={loading ? colors.textMuted : colors.primary}
+                />
               </TouchableOpacity>
             </View>
-          ) : threads.length === 0 ? (
-            <View className='flex-1 justify-center items-center py-8'>
-              <MaterialIcons name='chat-bubble-outline' size={32} color={colors.textMuted} />
-              <Text className='text-sm mt-2 text-center' style={{ color: colors.textMuted }}>
-                No chat history yet.{'\n'}Start a new conversation!
-              </Text>
-            </View>
-          ) : (
-            threads.map(thread => (
-              <TouchableOpacity
-                key={thread.id}
-                onPress={() => {
-                  onThreadSelect(thread);
-                  onClose();
-                }}
-                className={`p-3 rounded-lg mb-2 ${
-                  currentThreadId === thread.id ? 'border-2' : 'border'
-                }`}
-                style={{
-                  backgroundColor: currentThreadId === thread.id ? colors.surface : 'transparent',
-                  borderColor: currentThreadId === thread.id ? colors.primary : colors.border,
-                }}
-              >
-                <Text
-                  className='font-medium text-sm'
-                  style={{ color: colors.text }}
-                  numberOfLines={2}
+            <TouchableOpacity onPress={onClose} className='p-1'>
+              <MaterialIcons name='close' size={24} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          {/* New Chat Button */}
+          <View className='p-4 border-b' style={{ borderColor: colors.border }}>
+            <TouchableOpacity
+              onPress={() => {
+                onNewThread();
+                onClose();
+              }}
+              className='flex-row items-center justify-center p-3 rounded-lg'
+              style={{ backgroundColor: colors.primary }}
+            >
+              <MaterialIcons name='add' size={20} color='white' />
+              <Text className='text-white font-medium ml-2'>New Chat</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Threads List */}
+          <ScrollView className='flex-1 p-4'>
+            {loading ? (
+              <View className='flex-1 justify-center items-center py-8'>
+                <ActivityIndicator size='large' color={colors.primary} />
+                <Text className='text-sm mt-2' style={{ color: colors.textMuted }}>
+                  Loading threads...
+                </Text>
+              </View>
+            ) : error ? (
+              <View className='flex-1 justify-center items-center py-8'>
+                <MaterialIcons name='error-outline' size={32} color={colors.textMuted} />
+                <Text className='text-sm mt-2 text-center' style={{ color: colors.textMuted }}>
+                  {error}
+                </Text>
+                <TouchableOpacity
+                  onPress={loadThreads}
+                  className='mt-4 px-4 py-2 rounded-lg'
+                  style={{ backgroundColor: colors.surface }}
                 >
-                  {thread.title}
+                  <Text className='text-sm font-medium' style={{ color: colors.text }}>
+                    Retry
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : threads.length === 0 ? (
+              <View className='flex-1 justify-center items-center py-8'>
+                <MaterialIcons name='chat-bubble-outline' size={32} color={colors.textMuted} />
+                <Text className='text-sm mt-2 text-center' style={{ color: colors.textMuted }}>
+                  No chat history yet.{'\n'}Start a new conversation!
                 </Text>
-                <View className='flex-row justify-between items-center mt-2'>
-                  <Text className='text-xs' style={{ color: colors.textMuted }}>
-                    {thread.messageCount} messages
+              </View>
+            ) : (
+              threads.map(thread => (
+                <TouchableOpacity
+                  key={thread.id}
+                  onPress={() => {
+                    onThreadSelect(thread);
+                    onClose();
+                  }}
+                  className={`p-3 rounded-lg mb-2 ${
+                    currentThreadId === thread.id ? 'border-2' : 'border'
+                  }`}
+                  style={{
+                    backgroundColor: currentThreadId === thread.id ? colors.surface : 'transparent',
+                    borderColor: currentThreadId === thread.id ? colors.primary : colors.border,
+                  }}
+                >
+                  <Text
+                    className='font-medium text-sm'
+                    style={{ color: colors.text }}
+                    numberOfLines={2}
+                  >
+                    {thread.title}
                   </Text>
-                  <Text className='text-xs' style={{ color: colors.textMuted }}>
-                    {formatDate(thread.updatedAt)}
-                  </Text>
-                </View>
-                {thread.settings?.modelId && (
-                  <Text className='text-xs mt-1' style={{ color: colors.textMuted }}>
-                    {thread.settings.modelId}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+                  <View className='flex-row justify-between items-center mt-2'>
+                    <Text className='text-xs' style={{ color: colors.textMuted }}>
+                      {thread.messageCount} messages
+                    </Text>
+                    <Text className='text-xs' style={{ color: colors.textMuted }}>
+                      {formatDate(thread.updatedAt)}
+                    </Text>
+                  </View>
+                  {thread.settings?.modelId && (
+                    <Text className='text-xs mt-1' style={{ color: colors.textMuted }}>
+                      {thread.settings.modelId}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        </View>
       </View>
-    </View>
-  );
-};
+    );
+  }
+);
 
-// Export refresh function for external use
+ThreadsDrawer.displayName = 'ThreadsDrawer';
+
+// Export type for ref
+export type { ThreadsDrawerRef };
+
+// Export refresh hook for external use
 export const useThreadsDrawer = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [drawerRef, setDrawerRef] = useState<{ refreshThreads?: () => void }>({});
+  const drawerRef = useRef<ThreadsDrawerRef>(null);
 
   return {
     isOpen,
     openDrawer: () => setIsOpen(true),
     closeDrawer: () => setIsOpen(false),
-    refreshThreads: () => drawerRef.refreshThreads?.(),
-    setDrawerRef,
+    refreshThreads: () => drawerRef.current?.refreshThreads(),
+    drawerRef,
   };
 };
