@@ -60,22 +60,23 @@ export const completions = httpAction(async (ctx, request) => {
 
     // Use AI SDK directly for proper streaming
     const { streamText } = await import('ai');
-    const { getModelById } = await import('../../config/models');
+    const { createAIModel, getModelConfig } = await import('../../providers/model_factory');
 
-    const modelConfig = getModelById(model);
+    // Get model configuration for backward compatibility
+    const modelConfig = getModelConfig(model);
     if (!modelConfig) {
       return createErrorResponse(`Unknown model: ${model}`, 400);
     }
 
+    // Create AI model instance using the factory
     let aiModel;
-    if (modelConfig.provider === 'google') {
-      const { google } = await import('@ai-sdk/google');
-      aiModel = google(modelConfig.id);
-    } else if (modelConfig.provider === 'mistral') {
-      const { mistral } = await import('@ai-sdk/mistral');
-      aiModel = mistral(modelConfig.id);
-    } else {
-      return createErrorResponse(`Unsupported model provider: ${modelConfig.provider}`, 400);
+    try {
+      aiModel = createAIModel(model);
+    } catch (error) {
+      return createErrorResponse(
+        error instanceof Error ? error.message : `Failed to create model: ${model}`,
+        400
+      );
     }
 
     // Use intelligent context compression for existing threads
