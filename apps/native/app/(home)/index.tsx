@@ -19,27 +19,39 @@ import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { ThreadsDrawer, ThreadsDrawerRef } from '@/components/ui/threads-drawer';
-import { TestButton } from '@/components/ui/test-button';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread, Message } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 import { DrawerActions } from '@react-navigation/native';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useLocalSearchParams, useRouter } from 'expo-router';
+import { useThreadVersion } from '@/store/thread-version-store';
 
 export default function HomePage() {
   const { user } = useUser();
   const navigation = useNavigation();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const newChat = (params as Record<string, string>).newChat;
+  const threadParam = (params as Record<string, string>).id as string | undefined;
   const scrollViewRef = useRef<ScrollView>(null);
   const { isDarkColorScheme } = useColorScheme();
+  const { bump } = useThreadVersion();
 
   // State management
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<
-    'untested' | 'testing' | 'success' | 'failed'
-  >('untested');
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  const lastHandledRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (newChat && newChat !== lastHandledRef.current) {
+      handleNewThread();
+      lastHandledRef.current = newChat;
+      // Param handled; no further action
+    }
+  }, [newChat]);
 
   // Use AI SDK's useChat hook with proper configuration
   const {
@@ -58,7 +70,7 @@ export default function HomePage() {
     body: {
       clerkId: user?.id,
       model: selectedModel,
-      thread_id: currentThread?.id,
+      thread_id: currentThread?._id,
       generate_title: true,
     },
     onError: error => {
@@ -75,14 +87,7 @@ export default function HomePage() {
         refreshCurrentThread();
       }, 1500); // Small delay to allow backend title generation to complete
     },
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content:
-          "# Hello! I'm Chatzo 🚀\n\nYour AI assistant powered by **Google Gemini** and **Mistral AI** models. You can select different models using the selector in the input area below.\n\nHow can I help you today?",
-      },
-    ],
+    initialMessages: [],
   });
 
   // Ref to store the drawer refresh function
@@ -130,33 +135,6 @@ export default function HomePage() {
     }
   }, [messages]);
 
-  // Test connection
-  const testConnection = async () => {
-    setConnectionStatus('testing');
-    try {
-      const result = await chatAPI.testConnection();
-      setConnectionStatus(result.success ? 'success' : 'failed');
-      Alert.alert(result.success ? 'Success' : 'Failed', result.message);
-    } catch (error) {
-      setConnectionStatus('failed');
-      Alert.alert('Error', error instanceof Error ? error.message : 'Connection test failed');
-    }
-  };
-
-  // Test AI models
-  const testAI = async () => {
-    try {
-      const result = await chatAPI.testAI();
-      if (result.success) {
-        Alert.alert('AI Test Success', `Model: ${result.model}\nResponse: ${result.response}`);
-      } else {
-        Alert.alert('AI Test Failed', result.message);
-      }
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'AI test failed');
-    }
-  };
-
   // Load thread messages and set them in useChat
   const loadThreadMessages = async (threadId: string) => {
     if (!user?.id) return;
@@ -167,7 +145,7 @@ export default function HomePage() {
 
       // Convert API messages to useChat format
       const formattedMessages = result.messages.map((msg: any) => ({
-        id: msg._id,
+        id: msg._id || msg.id,
         role: msg.role,
         content: msg.content,
         createdAt: msg.createdAt ? new Date(msg.createdAt) : undefined,
@@ -185,7 +163,7 @@ export default function HomePage() {
 
   // Refresh current thread data to get updated title
   const refreshCurrentThread = async () => {
-    if (!currentThread?.id || !user?.id) return;
+    if (!currentThread?._id || !user?.id) return;
 
     try {
       const threadsResponse = await fetch(
@@ -193,7 +171,7 @@ export default function HomePage() {
       );
       const threadsData = await threadsResponse.json();
 
-      const updatedThread = threadsData.threads?.find((t: Thread) => t.id === currentThread.id);
+      const updatedThread = threadsData.threads?.find((t: Thread) => t._id === currentThread._id);
       if (updatedThread && updatedThread.title !== currentThread.title) {
         setCurrentThread(updatedThread);
         console.log('Thread title updated:', updatedThread.title);
@@ -214,22 +192,15 @@ export default function HomePage() {
     setSelectedModel(thread.settings?.modelId || 'gemini-2.5-flash');
 
     // Load messages for the selected thread
-    await loadThreadMessages(thread.id);
+    await loadThreadMessages(thread._id!);
   };
 
   // Handle new thread creation
   const handleNewThread = () => {
     setCurrentThread(null);
 
-    // Reset to welcome message
-    setMessages([
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content:
-          "# Hello! I'm Chatzo 🚀\n\nYour AI assistant powered by **Google Gemini** and **Mistral AI** models. You can select different models using the selector in the input area below.\n\nHow can I help you today?",
-      },
-    ]);
+    // Clear messages for fresh chat
+    setMessages([]);
   };
 
   // Custom input handler
@@ -255,6 +226,7 @@ export default function HomePage() {
           const { threads } = await chatAPI.getThreads(user.id, 1, 0, false);
           if (threads && threads.length > 0) {
             setCurrentThread(threads[0]);
+            bump();
           }
         }, 1500);
       } catch (err) {
@@ -262,6 +234,24 @@ export default function HomePage() {
       }
     }
   };
+
+  // Load thread when param provided from drawer
+  useEffect(() => {
+    if (!threadParam || currentThread?._id === threadParam) return;
+    const fetchThread = async () => {
+      if (!user?.id) return;
+      try {
+        const { threads } = await chatAPI.getThreads(user.id, 30, 0, false);
+        const target = threads.find((t: Thread) => t._id === threadParam);
+        if (target) {
+          await handleThreadSelect(target);
+        }
+      } catch (e) {
+        console.warn('Failed to load thread by param', e);
+      }
+    };
+    fetchThread();
+  }, [threadParam, user?.id]);
 
   if (error) {
     return (
@@ -335,29 +325,6 @@ export default function HomePage() {
                 AI Assistant powered by Google Gemini & Mistral AI • Latest AI SDK • Streaming
                 enabled
               </Text>
-
-              {/* Connection Test Buttons */}
-              <View className='flex-row space-x-2'>
-                <TouchableOpacity
-                  onPress={testConnection}
-                  className='px-3 py-1 rounded-md bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-700'
-                >
-                  <Text className='text-xs font-medium text-green-700 dark:text-green-300'>
-                    Test Convex ({connectionStatus})
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={testAI}
-                  className='px-3 py-1 rounded-md bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
-                >
-                  <Text className='text-xs font-medium text-blue-700 dark:text-blue-300'>
-                    Test AI Models
-                  </Text>
-                </TouchableOpacity>
-
-                <TestButton onSuccess={() => console.log('All tests passed!')} />
-              </View>
             </View>
 
             {/* Messages */}
@@ -365,7 +332,11 @@ export default function HomePage() {
               ref={scrollViewRef}
               className='flex-1 px-4 bg-background'
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingVertical: 16 }}
+              contentContainerStyle={{
+                paddingVertical: 16,
+                flexGrow: 1,
+                justifyContent: 'flex-end',
+              }}
             >
               {isLoadingMessages && (
                 <View className='items-center mb-4'>
@@ -445,7 +416,7 @@ export default function HomePage() {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onThreadSelect={handleThreadSelect}
-        currentThreadId={currentThread?.id}
+        currentThreadId={currentThread?._id}
         onNewThread={handleNewThread}
         ref={threadsDrawerRef}
       />

@@ -1,16 +1,26 @@
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 
 export interface Message {
-  id: string;
+  _id?: string;
+  id?: string; // fallback for compatibility
   role: 'user' | 'assistant' | 'system';
   content: string;
-  metadata?: any;
+  metadata?: {
+    modelId?: string;
+    modelName?: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    serverDurationMs?: number;
+    duration?: number;
+    temperature?: number;
+    maxTokens?: number;
+  };
   createdAt?: number;
   updatedAt?: number;
 }
 
 export interface Thread {
-  id: string;
+  _id: string;
   title: string;
   description?: string;
   createdAt: number;

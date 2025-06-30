@@ -111,8 +111,9 @@ http.route({
   handler: getThreads,
 });
 
+// Handle thread messages: /api/chat/threads/<threadId>/messages
 http.route({
-  path: '/api/chat/threads/.*/messages',
+  pathPrefix: '/api/chat/threads/',
   method: 'GET',
   handler: getMessages,
 });

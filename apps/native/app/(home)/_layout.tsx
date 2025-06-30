@@ -12,6 +12,8 @@ import { usePathname, useRouter } from 'expo-router';
 import { useUser } from '@clerk/clerk-expo';
 import { chatAPI, Thread } from '@/lib/api/chat-api';
 import { ActivityIndicator, View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useThreadVersion } from '@/store/thread-version-store';
 
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const router = useRouter();
@@ -36,73 +38,78 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     }
   }, [user?.id]);
 
+  const version = useThreadVersion(state => state.version);
+
+  // initial + whenever a new thread is created (version bumped)
   React.useEffect(() => {
     loadThreads();
-  }, [loadThreads]);
+  }, [version]);
 
   // Create new chat & navigate
-  const handleNewChat = async () => {
-    if (!user?.id) return;
-    try {
-      const thread = await chatAPI.createThread(user.id, 'New Chat');
-      // Refresh list and navigate
-      await loadThreads();
-      router.push(`/${thread.id}`);
-    } catch (err) {
-      console.warn('Failed to create thread', err);
-    }
+  const handleNewChat = () => {
+    // Set a unique param to trigger new chat reset in HomePage
+    router.setParams({ newChat: Date.now().toString() });
+    props.navigation.closeDrawer();
   };
 
   return (
-    <DrawerContentScrollView {...props}>
-      {/* Default (static) route(s) */}
-      <DrawerItemList {...props} />
+    <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom', 'left']}>
+      <DrawerContentScrollView {...props}>
+        {/* Default (static) route(s) */}
+        <DrawerItemList {...props} />
 
-      {/* New Chat button */}
-      <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-        <TouchableOpacity
-          onPress={handleNewChat}
-          style={{
-            backgroundColor: '#2563eb',
-            paddingVertical: 10,
-            borderRadius: 8,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: '#ffffff', fontWeight: '600' }}>+ New Chat</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Threads heading */}
-      <Text
-        key='threads-heading'
-        style={{ marginTop: 24, marginLeft: 16, fontWeight: 'bold', color: '#6b7280' }}
-      >
-        Threads
-      </Text>
-
-      {/* Loading / error / list */}
-      {loading ? (
-        <View style={{ padding: 20 }}>
-          <ActivityIndicator />
+        {/* New Chat button */}
+        <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+          <TouchableOpacity
+            onPress={handleNewChat}
+            style={{
+              backgroundColor: '#2563eb',
+              paddingVertical: 10,
+              borderRadius: 8,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: '600' }}>+ New Chat</Text>
+          </TouchableOpacity>
         </View>
-      ) : error ? (
-        <DrawerItem label={`Error: ${error}`} onPress={loadThreads} />
-      ) : (
-        threads.map(thread => {
-          const isActive = pathname === `/${thread.id}`;
-          return (
-            <DrawerItem
-              key={`thread-${String(thread.id)}`}
-              label={thread.title || 'Untitled'}
-              focused={isActive}
-              activeTintColor='#f97316'
-              onPress={() => router.push(`/${thread.id}`)}
-            />
-          );
-        })
-      )}
-    </DrawerContentScrollView>
+
+        {/* Threads heading */}
+        <Text
+          key='threads-heading'
+          style={{ marginTop: 24, marginLeft: 16, fontWeight: 'bold', color: '#6b7280' }}
+        >
+          Threads
+        </Text>
+
+        {/* Loading / error / list */}
+        {loading ? (
+          <View style={{ padding: 20 }}>
+            <ActivityIndicator />
+          </View>
+        ) : error ? (
+          <DrawerItem label={`Error: ${error}`} onPress={loadThreads} />
+        ) : (
+          threads.map((thread, idx) => {
+            const threadId = thread._id ?? `temp-${idx}`;
+            const isActive = pathname === `/${thread._id}`;
+            return (
+              <DrawerItem
+                key={`thread-${threadId}`}
+                label={thread.title || 'Untitled'}
+                focused={isActive}
+                activeTintColor='#f97316'
+                onPress={() => {
+                  if (thread._id) {
+                    props.navigation.navigate('[id]', { id: thread._id });
+                    props.navigation.closeDrawer();
+                  }
+                }}
+              />
+            );
+          })
+        )}
+      </DrawerContentScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -114,7 +121,13 @@ export default function HomeLayout() {
         screenOptions={{
           headerShown: false,
           drawerActiveTintColor: '#f97316',
-          drawerHideStatusBarOnOpen: true,
+          drawerHideStatusBarOnOpen: false,
+          drawerStatusBarAnimation: 'fade',
+          drawerStyle: {
+            width: '80%',
+            borderTopRightRadius: 16,
+            borderBottomRightRadius: 16,
+          },
         }}
       >
         {/* Main chat screen */}
