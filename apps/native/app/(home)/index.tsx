@@ -23,9 +23,12 @@ import { TestButton } from '@/components/ui/test-button';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread, Message } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
+import { DrawerActions } from '@react-navigation/native';
+import { useNavigation } from 'expo-router';
 
 export default function HomePage() {
   const { user } = useUser();
+  const navigation = useNavigation();
   const scrollViewRef = useRef<ScrollView>(null);
   const { isDarkColorScheme } = useColorScheme();
 
@@ -154,25 +157,6 @@ export default function HomePage() {
     }
   };
 
-  // Create new thread
-  const createNewThread = async (): Promise<Thread | null> => {
-    if (!user?.id) return null;
-
-    try {
-      await syncUserWithConvex();
-      const thread = await chatAPI.createThread(user.id, 'New Chat', {
-        modelId: selectedModel,
-        temperature: 0.7,
-        maxTokens: 1000,
-      });
-      return thread;
-    } catch (error) {
-      console.error('Failed to create thread:', error);
-      Alert.alert('Error', 'Failed to create new chat');
-      return null;
-    }
-  };
-
   // Load thread messages and set them in useChat
   const loadThreadMessages = async (threadId: string) => {
     if (!user?.id) return;
@@ -252,19 +236,31 @@ export default function HomePage() {
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || isLoading || !user?.id) return;
 
-    // Create thread if none exists
-    if (!currentThread) {
-      const newThread = await createNewThread();
-      if (newThread) {
-        setCurrentThread(newThread);
-      }
-    }
+    // If there's no current thread, we'll let the backend create one automatically.
+    // After the first response arrives, we will fetch the latest thread list and set it.
 
-    // Use AI SDK's append method for proper message handling
+    const shouldFetchThreadAfter = !currentThread;
+
+    // Send message via AI SDK
     await append({
       role: 'user',
       content: text,
     });
+
+    // If we didn't have a thread yet, fetch the most recent thread so the UI updates.
+    if (shouldFetchThreadAfter && user?.id) {
+      try {
+        // Give the backend a moment to create & update the thread
+        setTimeout(async () => {
+          const { threads } = await chatAPI.getThreads(user.id, 1, 0, false);
+          if (threads && threads.length > 0) {
+            setCurrentThread(threads[0]);
+          }
+        }, 1500);
+      } catch (err) {
+        console.warn('Failed to fetch latest thread:', err);
+      }
+    }
   };
 
   if (error) {
@@ -308,9 +304,9 @@ export default function HomePage() {
             <View className='py-4 px-4 border-b border-border bg-background'>
               <View className='flex-row items-center justify-between mb-2'>
                 <View className='flex-row items-center flex-1'>
-                  {/* Menu button for threads */}
+                  {/* Menu button to open navigation drawer */}
                   <TouchableOpacity
-                    onPress={() => setIsDrawerOpen(true)}
+                    onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
                     className='mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800'
                   >
                     <MaterialIcons

@@ -28,6 +28,7 @@ export const MessageMetadata = v.object({
   promptTokens: v.optional(v.number()),
   completionTokens: v.optional(v.number()),
   serverDurationMs: v.optional(v.number()),
+  duration: v.optional(v.number()), // Duration in milliseconds (alternative to serverDurationMs)
   temperature: v.optional(v.number()),
   maxTokens: v.optional(v.number()),
 });

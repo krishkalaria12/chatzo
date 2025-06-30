@@ -27,6 +27,7 @@ import type * as http from "../http.js";
 import type * as providers_base from "../providers/base.js";
 import type * as providers_google from "../providers/google.js";
 import type * as providers_mistral from "../providers/mistral.js";
+import type * as providers_model_factory from "../providers/model_factory.js";
 import type * as providers_registry from "../providers/registry.js";
 import type * as schemas_index from "../schemas/index.js";
 import type * as schemas_message from "../schemas/message.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   "providers/base": typeof providers_base;
   "providers/google": typeof providers_google;
   "providers/mistral": typeof providers_mistral;
+  "providers/model_factory": typeof providers_model_factory;
   "providers/registry": typeof providers_registry;
   "schemas/index": typeof schemas_index;
   "schemas/message": typeof schemas_message;

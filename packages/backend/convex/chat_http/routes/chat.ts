@@ -171,8 +171,6 @@ export const completions = httpAction(async (ctx, request) => {
                   modelName: completion.response.modelId,
                   promptTokens: completion.usage.promptTokens,
                   completionTokens: completion.usage.completionTokens,
-                  contextCompressed,
-                  contextMessageCount: contextMessages.length,
                   duration,
                 },
               })

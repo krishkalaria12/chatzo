@@ -304,8 +304,12 @@ export const getUserThreads = query({
       .withIndex('by_user_updated', (q: any) => q.eq('userId', user._id))
       .order('desc');
 
-    if (archived !== undefined) {
-      query = query.filter((q: any) => q.eq(q.field('isArchived'), archived));
+    if (archived === true) {
+      // Only show archived threads explicitly
+      query = query.filter((q: any) => q.eq(q.field('isArchived'), true));
+    } else if (archived === false) {
+      // Exclude threads marked archived=true, include undefined / false
+      query = query.filter((q: any) => q.neq(q.field('isArchived'), true));
     }
 
     const threads = await query
