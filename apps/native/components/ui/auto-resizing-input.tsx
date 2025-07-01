@@ -9,6 +9,7 @@ import Animated, {
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { ModelPicker } from './model-picker';
+import { cn } from '@/lib/utils';
 
 interface AutoResizingInputProps {
   onSend?: (text: string) => void;
@@ -101,7 +102,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   });
 
   return (
-    <View className='px-4 pb-6 pt-1'>
+    <View className={cn('px-4 pb-6 pt-1')}>
       <Animated.View
         style={[
           animatedContainerStyle,
@@ -111,15 +112,15 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
             borderColor: colors.border,
           },
         ]}
-        className='overflow-hidden rounded-2xl border'
+        className={cn('overflow-hidden rounded-2xl')}
       >
         {/* Model Selector */}
-        <View className='px-4 py-2 border-b' style={{ borderColor: colors.border }}>
-          <View className='flex-row items-center justify-between'>
-            <Text className='text-xs font-medium' style={{ color: colors.icon }}>
+        <View className={cn('px-4 py-2 border-b')} style={{ borderColor: colors.border }}>
+          <View className={cn('flex-row items-center justify-between')}>
+            <Text className={cn('text-xs font-medium')} style={{ color: colors.icon }}>
               Model
             </Text>
-            <View className='flex-1 ml-3'>
+            <View className={cn('flex-1 ml-3')}>
               <ModelPicker
                 selectedModel={selectedModel}
                 onModelChange={onModelChange || (() => {})}
@@ -132,7 +133,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
         <TouchableOpacity
           activeOpacity={1}
           onPress={handleInputContainerPress}
-          className='flex-1 px-6 py-3'
+          className={cn('flex-1 px-6 py-3')}
         >
           <TextInput
             ref={inputRef}
@@ -165,10 +166,10 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
         </TouchableOpacity>
 
         {/* Bottom section */}
-        <View className='flex-row items-center justify-between px-4 py-2'>
+        <View className={cn('flex-row items-center justify-between px-4 py-2')}>
           {/* Icons */}
-          <View className='flex-row items-center'>
-            <TouchableOpacity className='p-1'>
+          <View className={cn('flex-row items-center')}>
+            <TouchableOpacity className={cn('p-1')}>
               <MaterialIcons name='attach-file' size={20} color={colors.icon} />
             </TouchableOpacity>
           </View>
@@ -177,14 +178,14 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
           <TouchableOpacity
             onPress={handleSend}
             disabled={!text.trim()}
-            className='rounded-full px-4 py-2'
+            className={cn('rounded-full px-4 py-2')}
             style={{
               backgroundColor: text.trim() ? colors.sendButton.active : colors.sendButton.inactive,
               opacity: !text.trim() ? 0.5 : 1,
             }}
           >
             <Text
-              className='font-medium'
+              className={cn('font-medium')}
               style={{
                 color: text.trim() ? colors.sendText.active : colors.sendText.inactive,
               }}

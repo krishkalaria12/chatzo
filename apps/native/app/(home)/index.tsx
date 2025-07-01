@@ -17,6 +17,7 @@ import { useChat } from '@ai-sdk/react';
 import { fetch as expoFetch } from 'expo/fetch';
 import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
+import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { ThreadsDrawer, ThreadsDrawerRef } from '@/components/ui/threads-drawer';
 import { useColorScheme } from '@/lib/use-color-scheme';
@@ -25,6 +26,7 @@ import { generateConvexApiUrl } from '@/lib/convex-utils';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation, useLocalSearchParams, useRouter } from 'expo-router';
 import { useThreadVersion } from '@/store/thread-version-store';
+import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   const { user } = useUser();
@@ -285,19 +287,19 @@ export default function HomePage() {
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className='flex-1'
+        className={cn('flex-1')}
         enabled={true}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View className='flex-1'>
-            {/* Header */}
-            <View className='py-4 px-4 border-b border-border bg-background'>
-              <View className='flex-row items-center justify-between mb-2'>
-                <View className='flex-row items-center flex-1'>
+          <View className={cn('flex-1')}>
+            {/* Fixed Header */}
+            <View className={cn('py-4 px-4 border-b border-border bg-background z-[1000]')}>
+              <View className={cn('flex-row items-center justify-between')}>
+                <View className={cn('flex-row items-center flex-1')}>
                   {/* Menu button to open navigation drawer */}
                   <TouchableOpacity
                     onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
-                    className='mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800'
+                    className={cn('mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800')}
                   >
                     <MaterialIcons
                       name='menu'
@@ -306,100 +308,111 @@ export default function HomePage() {
                     />
                   </TouchableOpacity>
 
-                  <View className='flex-1'>
-                    <Text className='text-xl font-bold text-black dark:text-white'>
+                  <View className={cn('flex-1')}>
+                    <Text className={cn('text-xl font-bold text-black dark:text-white')}>
                       {currentThread?.title || 'New Chat'}
                     </Text>
-                    {currentThread && (
-                      <Text className='text-xs text-muted-foreground'>
-                        {currentThread.messageCount} messages •{' '}
-                        {currentThread.settings?.modelId || selectedModel}
-                      </Text>
-                    )}
                   </View>
                 </View>
                 <ThemeToggle />
               </View>
-
-              <Text className='text-sm text-muted-foreground mb-2'>
-                AI Assistant powered by Google Gemini & Mistral AI • Latest AI SDK • Streaming
-                enabled
-              </Text>
             </View>
 
-            {/* Messages */}
-            <ScrollView
-              ref={scrollViewRef}
-              className='flex-1 px-4 bg-background'
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{
-                paddingVertical: 16,
-                flexGrow: 1,
-                justifyContent: 'flex-end',
-              }}
-            >
-              {isLoadingMessages && (
-                <View className='items-center mb-4'>
-                  <ActivityIndicator
-                    size='small'
-                    color={isDarkColorScheme ? '#3b82f6' : '#2563eb'}
-                  />
-                  <Text className='text-xs text-muted-foreground mt-2'>
-                    Loading conversation...
-                  </Text>
-                </View>
+            {/* Messages Area */}
+            <View className={cn('flex-1 bg-background')}>
+              {/* Show Suggested Prompts when no messages */}
+              {messages.length === 0 && !isLoadingMessages && (
+                <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
               )}
 
-              {messages.map(message => (
-                <View
-                  key={message.id}
-                  className={`mb-4 ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+              {/* Messages ScrollView */}
+              {(messages.length > 0 || isLoadingMessages) && (
+                <ScrollView
+                  ref={scrollViewRef}
+                  className={cn('flex-1 px-4')}
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{
+                    paddingVertical: 16,
+                    flexGrow: 1,
+                    justifyContent: 'flex-end',
+                  }}
                 >
-                  <View
-                    className={`max-w-[85%] p-3 rounded-2xl ${
-                      message.role === 'user'
-                        ? 'bg-blue-500 rounded-br-md'
-                        : 'bg-gray-100 dark:bg-gray-800 rounded-bl-md'
-                    }`}
-                  >
-                    <Text
-                      className={`text-base leading-relaxed ${
-                        message.role === 'user' ? 'text-white' : 'text-gray-900 dark:text-gray-100'
-                      }`}
-                    >
-                      {message.content}
-                    </Text>
-                  </View>
-                  <Text
-                    className={`text-xs text-muted-foreground mt-1 px-1 ${
-                      message.role === 'user' ? 'text-right' : 'text-left'
-                    }`}
-                  >
-                    {message.role === 'user' ? 'You' : 'AI Assistant'}
-                  </Text>
-                </View>
-              ))}
-
-              {isLoading && (
-                <View className='items-start mb-4'>
-                  <View className='bg-gray-100 dark:bg-gray-800 p-3 rounded-2xl rounded-bl-md'>
-                    <View className='flex-row items-center'>
-                      <Text className='text-gray-600 dark:text-gray-300 text-base mr-2'>
-                        AI is thinking
+                  {isLoadingMessages && (
+                    <View className={cn('items-center mb-4')}>
+                      <ActivityIndicator
+                        size='small'
+                        color={isDarkColorScheme ? '#3b82f6' : '#2563eb'}
+                      />
+                      <Text className={cn('text-xs text-muted-foreground mt-2')}>
+                        Loading conversation...
                       </Text>
-                      <View className='flex-row'>
-                        <Text className='text-gray-400 animate-pulse'>●</Text>
-                        <Text className='text-gray-400 animate-pulse ml-1'>●</Text>
-                        <Text className='text-gray-400 animate-pulse ml-1'>●</Text>
+                    </View>
+                  )}
+
+                  {messages.map(message => (
+                    <View
+                      key={message.id}
+                      className={cn('mb-4', message.role === 'user' ? 'items-end' : 'items-start')}
+                    >
+                      <View
+                        className={cn(
+                          'max-w-[85%] p-3 rounded-2xl',
+                          message.role === 'user'
+                            ? 'bg-blue-500 rounded-br-md'
+                            : 'bg-gray-100 dark:bg-gray-800 rounded-bl-md'
+                        )}
+                      >
+                        <Text
+                          className={cn(
+                            'text-base leading-relaxed',
+                            message.role === 'user'
+                              ? 'text-white'
+                              : 'text-gray-900 dark:text-gray-100'
+                          )}
+                        >
+                          {message.content}
+                        </Text>
+                      </View>
+                      <Text
+                        className={cn(
+                          'text-xs text-muted-foreground mt-1 px-1',
+                          message.role === 'user' ? 'text-right' : 'text-left'
+                        )}
+                      >
+                        {message.role === 'user' ? 'You' : 'AI Assistant'}
+                      </Text>
+                    </View>
+                  ))}
+
+                  {isLoading && (
+                    <View className={cn('items-start mb-4')}>
+                      <View
+                        className={cn('bg-gray-100 dark:bg-gray-800 p-3 rounded-2xl rounded-bl-md')}
+                      >
+                        <View className={cn('flex-row items-center')}>
+                          <Text className={cn('text-gray-600 dark:text-gray-300 text-base mr-2')}>
+                            AI is thinking
+                          </Text>
+                          <View className={cn('flex-row')}>
+                            <Text className={cn('text-gray-400 animate-pulse')}>●</Text>
+                            <Text className={cn('text-gray-400 animate-pulse ml-1')}>●</Text>
+                            <Text className={cn('text-gray-400 animate-pulse ml-1')}>●</Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                </View>
+                  )}
+                </ScrollView>
               )}
-            </ScrollView>
+            </View>
 
-            {/* Auto Resizing Input */}
-            <View style={{ paddingBottom: Platform.OS === 'ios' ? 10 : 20 }}>
+            {/* Fixed Input at Bottom */}
+            <View
+              className={cn('bg-background border-t border-border z-[1000]')}
+              style={{
+                paddingBottom: Platform.OS === 'ios' ? 10 : 20,
+              }}
+            >
               <AutoResizingInput
                 onSend={handleSendMessage}
                 placeholder='Type your message...'

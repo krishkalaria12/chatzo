@@ -8,6 +8,7 @@ export { Skeleton, SkeletonText, SkeletonThreadItem } from './skeleton';
 export { Input } from './input';
 export { Button } from './button';
 export { AutoResizingInput } from './auto-resizing-input';
+export { SuggestedPrompts } from './suggested-prompts';
 
 // Display components
 export {
