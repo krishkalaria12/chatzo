@@ -1,30 +1,24 @@
 // Enhanced list components
-export { EnhancedFlashList, type EnhancedFlashListRef } from './enhanced-flash-list';
+export * from './enhanced-flash-list';
 
 // Loading components
-export { Skeleton, SkeletonText, SkeletonThreadItem } from './skeleton';
+export * from './skeleton';
 
 // Form components
-export { Input } from './input';
-export { Button } from './button';
-export { AutoResizingInput } from './auto-resizing-input';
-export { SuggestedPrompts } from './suggested-prompts';
+export * from './input';
+export * from './button';
+export * from './auto-resizing-input';
+export * from './suggested-prompts';
 
 // Display components
-export {
-  ModelInfo,
-  ProviderBadge,
-  CapabilityBadge,
-  ModelDisplayUtils,
-  type DisplayModel,
-  type ProviderDisplayConfig,
-  type ThemeColors,
-} from './model-display';
-export { ModelPicker } from './model-picker';
+export * from './model-display';
+export * from './model-picker';
 
 // UI controls
-export { ThemeToggle } from './theme-toggle';
-export { ThreadsDrawer, useThreadsDrawer, type ThreadsDrawerRef } from './threads-drawer';
+export * from './theme-toggle';
 
 // Testing components
-export { TestButton } from './test-button';
+export * from './test-button';
+
+// Animation components
+export * from './shimmer-text';

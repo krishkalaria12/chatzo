@@ -9,7 +9,6 @@ import {
   Alert,
   TouchableWithoutFeedback,
   Keyboard,
-  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
@@ -19,19 +18,18 @@ import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
 import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { ThreadsDrawer, ThreadsDrawerRef } from '@/components/ui/threads-drawer';
+import { MessageList } from '@/components/messages';
 import { useColorScheme } from '@/lib/use-color-scheme';
-import { chatAPI, Thread, Message } from '@/lib/api/chat-api';
+import { chatAPI, Thread } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 import { DrawerActions } from '@react-navigation/native';
-import { useNavigation, useLocalSearchParams, useRouter } from 'expo-router';
+import { useNavigation, useLocalSearchParams } from 'expo-router';
 import { useThreadVersion } from '@/store/thread-version-store';
 import { cn } from '@/lib/utils';
 
 export default function HomePage() {
   const { user } = useUser();
   const navigation = useNavigation();
-  const router = useRouter();
   const params = useLocalSearchParams();
   const newChat = (params as Record<string, string>).newChat;
   const threadParam = (params as Record<string, string>).id as string | undefined;
@@ -39,10 +37,8 @@ export default function HomePage() {
   const { isDarkColorScheme } = useColorScheme();
   const { bump } = useThreadVersion();
 
-  // State management
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const lastHandledRef = useRef<string | undefined>(undefined);
@@ -51,22 +47,11 @@ export default function HomePage() {
     if (newChat && newChat !== lastHandledRef.current) {
       handleNewThread();
       lastHandledRef.current = newChat;
-      // Param handled; no further action
     }
   }, [newChat]);
 
   // Use AI SDK's useChat hook with proper configuration
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    error,
-    append,
-    setMessages,
-    reload,
-  } = useChat({
+  const { messages, isLoading, error, append, setMessages } = useChat({
     fetch: expoFetch as unknown as typeof globalThis.fetch,
     api: generateConvexApiUrl('/api/chat/completions'),
     body: {
@@ -79,21 +64,13 @@ export default function HomePage() {
       console.error('Chat error:', error);
       Alert.alert('Chat Error', error.message || 'Unknown error occurred');
     },
-    onFinish: (message, { usage, finishReason }) => {
-      console.log('Message completed:', { message, usage, finishReason });
-
-      // Refresh thread list to show updated titles
-      // This will be triggered when the backend updates the title
+    onFinish: () => {
       setTimeout(() => {
-        refreshThreadsList();
         refreshCurrentThread();
-      }, 1500); // Small delay to allow backend title generation to complete
+      }, 1500);
     },
     initialMessages: [],
   });
-
-  // Ref to store the drawer refresh function
-  const threadsDrawerRef = useRef<ThreadsDrawerRef>(null);
 
   // Sync user with Convex database
   const syncUserWithConvex = async () => {
@@ -181,11 +158,6 @@ export default function HomePage() {
     } catch (error) {
       console.warn('Failed to refresh current thread:', error);
     }
-  };
-
-  // Refresh threads list (for drawer)
-  const refreshThreadsList = () => {
-    threadsDrawerRef.current?.refreshThreads();
   };
 
   // Handle thread selection
@@ -321,88 +293,18 @@ export default function HomePage() {
             {/* Messages Area */}
             <View className={cn('flex-1 bg-background')}>
               {/* Show Suggested Prompts when no messages */}
-              {messages.length === 0 && !isLoadingMessages && (
+              {messages.length === 0 && !isLoadingMessages && !isLoading && (
                 <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
               )}
 
-              {/* Messages ScrollView */}
-              {(messages.length > 0 || isLoadingMessages) && (
-                <ScrollView
+              {/* Enhanced Message List */}
+              {(messages.length > 0 || isLoadingMessages || isLoading) && (
+                <MessageList
                   ref={scrollViewRef}
-                  className={cn('flex-1 px-4')}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{
-                    paddingVertical: 16,
-                    flexGrow: 1,
-                    justifyContent: 'flex-end',
-                  }}
-                >
-                  {isLoadingMessages && (
-                    <View className={cn('items-center mb-4')}>
-                      <ActivityIndicator
-                        size='small'
-                        color={isDarkColorScheme ? '#3b82f6' : '#2563eb'}
-                      />
-                      <Text className={cn('text-xs text-muted-foreground mt-2')}>
-                        Loading conversation...
-                      </Text>
-                    </View>
-                  )}
-
-                  {messages.map(message => (
-                    <View
-                      key={message.id}
-                      className={cn('mb-4', message.role === 'user' ? 'items-end' : 'items-start')}
-                    >
-                      <View
-                        className={cn(
-                          'max-w-[85%] p-3 rounded-2xl',
-                          message.role === 'user'
-                            ? 'bg-blue-500 rounded-br-md'
-                            : 'bg-gray-100 dark:bg-gray-800 rounded-bl-md'
-                        )}
-                      >
-                        <Text
-                          className={cn(
-                            'text-base leading-relaxed',
-                            message.role === 'user'
-                              ? 'text-white'
-                              : 'text-gray-900 dark:text-gray-100'
-                          )}
-                        >
-                          {message.content}
-                        </Text>
-                      </View>
-                      <Text
-                        className={cn(
-                          'text-xs text-muted-foreground mt-1 px-1',
-                          message.role === 'user' ? 'text-right' : 'text-left'
-                        )}
-                      >
-                        {message.role === 'user' ? 'You' : 'AI Assistant'}
-                      </Text>
-                    </View>
-                  ))}
-
-                  {isLoading && (
-                    <View className={cn('items-start mb-4')}>
-                      <View
-                        className={cn('bg-gray-100 dark:bg-gray-800 p-3 rounded-2xl rounded-bl-md')}
-                      >
-                        <View className={cn('flex-row items-center')}>
-                          <Text className={cn('text-gray-600 dark:text-gray-300 text-base mr-2')}>
-                            AI is thinking
-                          </Text>
-                          <View className={cn('flex-row')}>
-                            <Text className={cn('text-gray-400 animate-pulse')}>●</Text>
-                            <Text className={cn('text-gray-400 animate-pulse ml-1')}>●</Text>
-                            <Text className={cn('text-gray-400 animate-pulse ml-1')}>●</Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  )}
-                </ScrollView>
+                  messages={messages}
+                  isLoading={isLoading}
+                  isLoadingMessages={isLoadingMessages}
+                />
               )}
             </View>
 
@@ -423,16 +325,6 @@ export default function HomePage() {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-
-      {/* Threads Drawer */}
-      <ThreadsDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        onThreadSelect={handleThreadSelect}
-        currentThreadId={currentThread?._id}
-        onNewThread={handleNewThread}
-        ref={threadsDrawerRef}
-      />
     </AppContainer>
   );
 }
