@@ -18,7 +18,8 @@ import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
 import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { MessageList } from '@/components/messages';
+import { MessageList, MessageRenderer } from '@/components/messages';
+import { TypingShimmer } from '@/components/ui/shimmer-text';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
@@ -250,81 +251,123 @@ export default function HomePage() {
   }
 
   return (
-    <AppContainer
-      enableScrollBar={true}
-      scrollBar={{
-        color: isDarkColorScheme ? '#f97316' : '#ea580c',
-        showRail: true,
-      }}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className={cn('flex-1')}
-        enabled={true}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View className={cn('flex-1')}>
-            {/* Fixed Header */}
-            <View className={cn('py-4 px-4 border-b border-border bg-background z-[1000]')}>
-              <View className={cn('flex-row items-center justify-between')}>
-                <View className={cn('flex-row items-center flex-1')}>
-                  {/* Menu button to open navigation drawer */}
-                  <TouchableOpacity
-                    onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
-                    className={cn('mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800')}
-                  >
-                    <MaterialIcons
-                      name='menu'
-                      size={20}
-                      color={isDarkColorScheme ? '#f9fafb' : '#111827'}
-                    />
-                  </TouchableOpacity>
+    <AppContainer>
+      <View className={cn('flex-1 relative')} style={{ flex: 1 }}>
+        {/* Fixed Header - Absolute positioned */}
+        <View
+          className={cn(
+            'absolute top-0 left-0 right-0 z-50 py-4 px-4 border-b border-border bg-background'
+          )}
+        >
+          <View className={cn('flex-row items-center justify-between')}>
+            <View className={cn('flex-row items-center flex-1')}>
+              {/* Menu button to open navigation drawer */}
+              <TouchableOpacity
+                onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
+                className={cn('mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800')}
+              >
+                <MaterialIcons
+                  name='menu'
+                  size={20}
+                  color={isDarkColorScheme ? '#f9fafb' : '#111827'}
+                />
+              </TouchableOpacity>
 
-                  <View className={cn('flex-1')}>
-                    <Text className={cn('text-xl font-bold text-black dark:text-white')}>
-                      {currentThread?.title || 'New Chat'}
-                    </Text>
-                  </View>
-                </View>
-                <ThemeToggle />
+              <View className={cn('flex-1')}>
+                <Text className={cn('text-xl font-bold text-black dark:text-white')}>
+                  {currentThread?.title || 'New Chat'}
+                </Text>
               </View>
             </View>
+            <ThemeToggle />
+          </View>
+        </View>
 
-            {/* Messages Area */}
-            <View className={cn('flex-1 bg-background')}>
+        {/* Scrollable Content Area */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className={cn('flex-1')}
+          style={{ flex: 1 }}
+          enabled={true}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <ScrollView
+              ref={scrollViewRef}
+              className={cn('flex-1')}
+              style={{
+                flex: 1,
+              }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{
+                flexGrow: 1,
+                paddingTop: Platform.OS === 'ios' ? 110 : 100, // More space from header
+                paddingBottom: 180, // More space from input area
+                paddingHorizontal: 0,
+              }}
+              keyboardShouldPersistTaps='handled'
+            >
               {/* Show Suggested Prompts when no messages */}
               {messages.length === 0 && !isLoadingMessages && !isLoading && (
-                <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
+                <View className={cn('flex-1')}>
+                  <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
+                </View>
               )}
 
-              {/* Enhanced Message List */}
+              {/* Messages */}
               {(messages.length > 0 || isLoadingMessages || isLoading) && (
-                <MessageList
-                  ref={scrollViewRef}
-                  messages={messages}
-                  isLoading={isLoading}
-                  isLoadingMessages={isLoadingMessages}
-                />
-              )}
-            </View>
+                <View className={cn('flex-1')}>
+                  {/* Loading indicator for initial message loading */}
+                  {isLoadingMessages && (
+                    <View className={cn('flex-1 justify-center items-center')}>
+                      <Text className={cn('text-base', 'text-gray-600 dark:text-gray-400')}>
+                        Loading conversation...
+                      </Text>
+                    </View>
+                  )}
 
-            {/* Fixed Input at Bottom */}
-            <View
-              className={cn('bg-background border-t border-border z-[1000]')}
-              style={{
-                paddingBottom: Platform.OS === 'ios' ? 10 : 20,
-              }}
-            >
-              <AutoResizingInput
-                onSend={handleSendMessage}
-                placeholder='Type your message...'
-                selectedModel={selectedModel}
-                onModelChange={setSelectedModel}
-              />
-            </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
+                  {/* Messages */}
+                  {messages.map((message, index) => (
+                    <MessageRenderer
+                      key={`${message.id}-${index}`}
+                      message={{
+                        id: message.id,
+                        role: message.role as 'user' | 'assistant' | 'system',
+                        content: message.content,
+                        createdAt: message.createdAt,
+                      }}
+                    />
+                  ))}
+
+                  {/* Typing indicator */}
+                  {isLoading && (
+                    <View className={cn('items-start mb-4 px-4')}>
+                      <TypingShimmer visible={true} />
+                    </View>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+
+        {/* Fixed Input at Bottom - Absolute positioned */}
+        <View
+          className={cn(
+            'absolute bottom-0 left-0 right-0 z-50 bg-background border-t border-border'
+          )}
+          style={{
+            paddingTop: 8,
+            paddingBottom: Platform.OS === 'ios' ? 10 : 5, // Very little spacing from screen
+          }}
+        >
+          <AutoResizingInput
+            onSend={handleSendMessage}
+            placeholder='Type your message...'
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+          />
+        </View>
+      </View>
     </AppContainer>
   );
 }

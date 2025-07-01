@@ -72,11 +72,7 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
       </View>
 
       {/* Suggested Prompts Grid */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        className={cn('flex-1')}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      >
+      <View className={cn('flex-1')}>
         <View className={cn('flex-row flex-wrap justify-between')}>
           {SUGGESTED_PROMPTS.map((prompt, index) => (
             <TouchableOpacity
@@ -112,7 +108,7 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({
             </TouchableOpacity>
           ))}
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 };

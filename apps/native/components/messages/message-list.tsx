@@ -54,6 +54,7 @@ export const MessageList = memo(
         <ScrollView
           ref={ref}
           className={cn('flex-1', className)}
+          style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingVertical: 12,
