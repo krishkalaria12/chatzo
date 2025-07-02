@@ -2,33 +2,28 @@
  * Title Generation Prompts Configuration
  *
  * Based on the requirements for generating concise, descriptive titles
- * for chat conversations using AI structured data generation.
+ * for chat conversations using AI text generation with multimodal support.
  */
 
-export const TITLE_GENERATION_PROMPT = `You are tasked with generating a concise, descriptive title for a chat conversation based on the initial messages. The title should:
+export const TITLE_GENERATION_SYSTEM_PROMPT = `You are an expert at analyzing conversations and creating concise, descriptive titles. 
 
-1. Be 2-6 words long
-2. Capture the main topic or question being discussed  
-3. Be clear and specific
-4. Use title case (capitalize first letter of each major word)
-5. Not include quotation marks or special characters
-6. Be professional and appropriate
+**CRITICAL RULE: You must respond with ONLY a 2-6 word title. No explanations, no additional text, just the title.**
+
+Focus on the main topic or intent of the conversation, including any visual content. Keep titles professional and clear.
 
 Examples of good titles:
-- "Python Data Analysis Help"
-- "React Component Design"
+- "Python Data Analysis"
+- "React Component Help"
 - "Travel Planning Italy"
-- "Budget Spreadsheet Formula"
+- "Budget Formula Question"
 - "Career Change Advice"
 - "Database Schema Design"
 - "API Development Guide"
-- "Frontend Performance Tips"
-- "DevOps Best Practices"
+- "Image Processing Code"
+- "UI Design Review"
 - "Mobile App Architecture"
 
-Generate a title that accurately represents what this conversation is about based on the messages provided.`;
-
-export const TITLE_GENERATION_SYSTEM_PROMPT = `You are an expert at analyzing conversations and creating concise, descriptive titles. Focus on the main topic or intent of the conversation. Keep titles professional and clear.`;
+`;
 
 /**
  * Schema for title generation using AI SDK structured data
@@ -70,26 +65,20 @@ export const TITLE_SCHEMA = {
 /**
  * Fallback titles when AI generation fails
  */
-export const FALLBACK_TITLES = [
-  'New Chat',
-  'Conversation',
-  'Discussion',
-  'Question & Answer',
-  'Help Request',
-  'Technical Discussion',
-];
+export const FALLBACK_TITLE = 'New Chat';
 
 /**
  * Common topic patterns for quick title generation
  */
 export const TOPIC_PATTERNS = {
   code: ['Code Review', 'Programming Help', 'Debug Session'],
-  database: ['Database Design', 'SQL Query Help', 'Schema Planning'],
+  database: ['Database Design', 'SQL Query', 'Schema Planning'],
   frontend: ['UI Development', 'Frontend Design', 'Component Help'],
   backend: ['API Development', 'Server Setup', 'Backend Architecture'],
   devops: ['Deployment Help', 'Infrastructure Setup', 'DevOps Guide'],
   learning: ['Learning Session', 'Tutorial Request', 'Concept Explanation'],
   planning: ['Project Planning', 'Architecture Design', 'Strategy Discussion'],
+  image: ['Image Analysis', 'Visual Content', 'Photo Discussion'],
 };
 
 /**
@@ -107,6 +96,7 @@ export function extractTopics(messages: string[]): string[] {
     database: ['sql', 'mongodb', 'postgres', 'mysql', 'database', 'schema', 'query'],
     devops: ['docker', 'kubernetes', 'aws', 'deployment', 'ci/cd', 'infrastructure'],
     ai: ['ai', 'machine learning', 'llm', 'gpt', 'claude', 'openai', 'model'],
+    image: ['image', 'photo', 'picture', 'visual', 'design', 'graphic'],
   };
 
   for (const [category, words] of Object.entries(keywords)) {

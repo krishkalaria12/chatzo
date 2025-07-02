@@ -1,10 +1,38 @@
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 
+// Individual content part types (compatible with AI SDK format)
+export type TextContentPart = {
+  type: 'text';
+  text: string;
+};
+
+export type ImageContentPart = {
+  type: 'image';
+  url: string;
+  alt?: string;
+};
+
+export type FileContentPart = {
+  type: 'file';
+  url: string;
+  fileName: string;
+  fileSize?: number;
+  mimeType?: string;
+};
+
+export type ContentPart = TextContentPart | ImageContentPart | FileContentPart;
+
+// Message content types matching backend schema and AI SDK format
+export type MessageContent =
+  | string // Simple text (legacy support)
+  | ContentPart // Single content part
+  | ContentPart[]; // Array of content parts (AI SDK compatible for mixed content)
+
 export interface Message {
   _id?: string;
   id?: string; // fallback for compatibility
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: MessageContent;
   metadata?: {
     modelId?: string;
     modelName?: string;
@@ -59,6 +87,50 @@ export interface ChatCompletionResponse {
 
 class ChatAPI {
   private baseUrl = generateConvexApiUrl('');
+
+  /**
+   * Helper function to create AI SDK compatible message content
+   * Combines text and images into proper content array format
+   */
+  createMessageContent(
+    text?: string,
+    images?: { uri: string; cloudinaryPublicId?: string; name: string }[]
+  ): MessageContent {
+    const parts: ContentPart[] = [];
+
+    // Add text part if present
+    if (text && text.trim()) {
+      parts.push({
+        type: 'text',
+        text: text.trim(),
+      });
+    }
+
+    // Add image parts if present - use Cloudinary URLs
+    if (images && images.length > 0) {
+      for (const image of images) {
+        // Use Cloudinary URL if available, otherwise fall back to URI
+        const imageUrl = image.cloudinaryPublicId
+          ? `https://res.cloudinary.com/dgchynkag/image/upload/${image.cloudinaryPublicId}`
+          : image.uri;
+
+        parts.push({
+          type: 'image',
+          url: imageUrl,
+          alt: image.name,
+        });
+      }
+    }
+
+    // Return appropriate format based on content
+    if (parts.length === 0) {
+      return ''; // Empty content
+    } else if (parts.length === 1 && parts[0].type === 'text') {
+      return parts[0].text; // Simple string for text-only
+    } else {
+      return parts; // Array format for mixed content or images
+    }
+  }
 
   /**
    * Send chat completion request with streaming

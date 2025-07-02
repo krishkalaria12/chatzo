@@ -40,10 +40,55 @@ export const completions = httpAction(async (ctx, request) => {
     }
 
     // Convert to AI SDK format
-    const aiMessages = messages.map((msg: any) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    const aiMessages = messages.map((msg: any) => {
+      let content = msg.content;
+
+      // Handle array content (multimodal)
+      if (Array.isArray(content)) {
+        return {
+          role: msg.role,
+          content: content.map((part: any) => {
+            if (part.type === 'text') {
+              return { type: 'text' as const, text: String(part.text) };
+            }
+            if (part.type === 'image') {
+              const imageUrl = String(part.url);
+
+              // Handle HTTPS URLs (Cloudinary, etc.)
+              if (imageUrl.startsWith('https://')) {
+                return { type: 'image' as const, image: imageUrl };
+              }
+
+              // Handle base64 data URLs (backup method)
+              if (imageUrl.startsWith('data:image/')) {
+                return { type: 'image' as const, image: imageUrl };
+              }
+
+              // Reject local file URIs
+              if (imageUrl.startsWith('file://') || imageUrl.startsWith('content://')) {
+                return {
+                  type: 'text' as const,
+                  text: '[Image was not uploaded to cloud storage and cannot be processed]',
+                };
+              }
+
+              // Reject other unsupported formats
+              return {
+                type: 'text' as const,
+                text: '[Unsupported image format - only HTTPS URLs or base64 are supported]',
+              };
+            }
+            return { type: 'text' as const, text: String(part) };
+          }),
+        };
+      }
+
+      // Handle simple string content
+      return {
+        role: msg.role,
+        content: String(content),
+      };
+    });
 
     let currentThreadId = thread_id;
     let isNewThread = false;
@@ -61,6 +106,7 @@ export const completions = httpAction(async (ctx, request) => {
     // Use AI SDK directly for proper streaming
     const { streamText } = await import('ai');
     const { createAIModel, getModelConfig } = await import('../../providers/model_factory');
+    const { getSystemPrompt } = await import('../../config/prompts');
 
     // Get model configuration for backward compatibility
     const modelConfig = getModelConfig(model);
@@ -97,10 +143,6 @@ export const completions = httpAction(async (ctx, request) => {
 
         contextMessages = compressedMessages;
         contextCompressed = compressedMessages.length < aiMessages.length + 5; // Rough estimation
-
-        console.log(
-          `Context compression: Original ${aiMessages.length} + existing -> ${compressedMessages.length} messages`
-        );
       } catch (error) {
         console.warn('Failed to compress context, using original messages:', error);
         // Fallback to original messages if compression fails
@@ -109,16 +151,15 @@ export const completions = httpAction(async (ctx, request) => {
 
     // Start title generation in parallel for new threads (don't await)
     if (isNewThread && messages.length >= 1 && generate_title) {
-      const messageTexts = messages
-        .map((msg: any) => (typeof msg.content === 'string' ? msg.content : String(msg.content)))
-        .filter((text: string) => text.trim().length > 0);
+      // Pass the full message objects (including images) to title generation
+      const titleMessages = aiMessages;
 
-      if (messageTexts.length > 0) {
+      if (titleMessages.length > 0) {
         // Fire and forget - runs in parallel with streaming
-        // Title generation now always uses gemini-2.0-flash internally
+        // Title generation uses multimodal support with gemini-2.0-flash
         ctx
           .runAction(api.services.chat_service.generateThreadTitle, {
-            messages: messageTexts,
+            messages: titleMessages,
           })
           .then((titleResult: any) =>
             ctx.runMutation(api.services.chat_service.updateThreadTitle, {
@@ -134,8 +175,12 @@ export const completions = httpAction(async (ctx, request) => {
 
     const startTime = Date.now();
 
+    // Generate system prompt using the model configuration
+    const systemPrompt = getSystemPrompt(modelConfig);
+
     const result = await streamText({
       model: aiModel,
+      system: systemPrompt,
       messages: contextMessages,
       temperature: temperature ?? modelConfig.temperature,
       maxTokens: max_tokens ?? modelConfig.maxTokens,
@@ -148,7 +193,7 @@ export const completions = httpAction(async (ctx, request) => {
           try {
             const promises = [];
 
-            // Save user message
+            // Save user message - SIMPLE
             if (messages.length > 0) {
               promises.push(
                 ctx.runMutation(api.services.chat_service.saveMessage, {
@@ -251,7 +296,7 @@ export const completions = httpAction(async (ctx, request) => {
 
 /**
  * POST /api/chat/generate-title
- * Generate AI-powered conversation titles (always uses gemini-2.0-flash)
+ * Generate AI-powered conversation titles with multimodal support (uses gemini-2.0-flash)
  */
 export const generateTitle = httpAction(async (ctx, request) => {
   try {
@@ -272,25 +317,16 @@ export const generateTitle = httpAction(async (ctx, request) => {
       return createErrorResponse('Messages array is required', 400);
     }
 
-    // Extract text content from messages
-    const messageTexts = messages
-      .map((msg: any) =>
-        typeof msg.content === 'string'
-          ? msg.content
-          : msg.content?.type === 'text'
-            ? msg.content.text
-            : String(msg.content || '')
-      )
-      .filter((text: string) => text.trim().length > 0)
-      .slice(0, 10);
+    // Pass full message objects (including images) to title generation
+    const titleMessages = messages.slice(0, 3); // First 3 messages for context
 
-    if (messageTexts.length === 0) {
+    if (titleMessages.length === 0) {
       return createErrorResponse('No valid message content found', 400);
     }
 
-    // Title generation now always uses gemini-2.0-flash internally
+    // Title generation uses multimodal support with gemini-2.0-flash
     const result = await ctx.runAction(api.services.chat_service.generateThreadTitle, {
-      messages: messageTexts,
+      messages: titleMessages,
     });
 
     // Update thread title if thread_id provided

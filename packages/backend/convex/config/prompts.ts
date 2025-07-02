@@ -29,6 +29,7 @@ You are intelligent, thoughtful, and adaptive. You aim to understand the user's 
 - Provide step-by-step explanations for complex topics
 - Be honest about your limitations
 - Maintain a helpful and professional tone
+{imageGuidelines}
 
 **Response Format Restrictions:**
 - ALWAYS format your responses using proper Markdown syntax
@@ -152,6 +153,11 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
 
   if (model.supportsVision) {
     additionalCapabilities.push('- Understanding and analyzing images and visual content');
+    additionalCapabilities.push('- Reading and extracting text from images accurately');
+    additionalCapabilities.push(
+      '- Describing visual elements, objects, people, and settings in detail'
+    );
+    additionalCapabilities.push('- Answering specific questions about image content');
   }
 
   if (model.supportsTools) {
@@ -165,6 +171,18 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
   const capabilitiesText =
     additionalCapabilities.length > 0 ? '\n' + additionalCapabilities.join('\n') : '';
 
+  const imageGuidelines = model.supportsVision
+    ? `
+
+**When analyzing images:**
+- Examine all visual elements thoroughly (objects, people, text, settings, colors)
+- Provide detailed descriptions when asked about image content
+- Extract and transcribe any visible text accurately
+- Answer specific questions about what you see
+- If you cannot see an image clearly, say so directly
+- Be helpful and offer insights related to the visual content`
+    : '';
+
   const providerName =
     model.provider === 'google'
       ? 'Google'
@@ -176,6 +194,7 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
     .replace('{modelId}', model.id)
     .replace('{modelDescription}', model.description)
     .replace('{additionalCapabilities}', capabilitiesText)
+    .replace('{imageGuidelines}', imageGuidelines)
     .replace('{providerName}', providerName);
 };
 

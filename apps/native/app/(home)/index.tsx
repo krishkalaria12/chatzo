@@ -16,16 +16,18 @@ import { useChat } from '@ai-sdk/react';
 import { fetch as expoFetch } from 'expo/fetch';
 import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
+import { getOptimizedImageUrl } from '@/utils/cloudinary';
 import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { MessageList, MessageRenderer } from '@/components/messages';
 import { TypingShimmer } from '@/components/ui/shimmer-text';
 import { useColorScheme } from '@/lib/use-color-scheme';
-import { chatAPI, Thread } from '@/lib/api/chat-api';
+import { chatAPI, Thread, MessageContent } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation, useLocalSearchParams } from 'expo-router';
 import { useThreadVersion } from '@/store/thread-version-store';
+import { useModelsStore } from '@/store/models-store';
 import { cn } from '@/lib/utils';
 
 export default function HomePage() {
@@ -37,6 +39,7 @@ export default function HomePage() {
   const scrollViewRef = useRef<ScrollView>(null);
   const { isDarkColorScheme } = useColorScheme();
   const { bump } = useThreadVersion();
+  const { fetchModels } = useModelsStore();
 
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
@@ -99,12 +102,14 @@ export default function HomePage() {
     }
   };
 
-  // Sync user on component mount
+  // Sync user and initialize models on component mount
   useEffect(() => {
     if (user?.id) {
       syncUserWithConvex();
     }
-  }, [user?.id]);
+    // Initialize models store
+    fetchModels();
+  }, [user?.id, fetchModels]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -178,35 +183,44 @@ export default function HomePage() {
     setMessages([]);
   };
 
-  // Custom input handler
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim() || isLoading || !user?.id) return;
+  // Interface for image attachments matching auto-resizing-input
+  interface ImageAttachment {
+    id: string;
+    uri: string;
+    cloudinaryPublicId?: string;
+    name: string;
+    size?: number;
+    isUploading?: boolean;
+    uploadProgress?: number;
+    error?: string;
+  }
 
-    // If there's no current thread, we'll let the backend create one automatically.
-    // After the first response arrives, we will fetch the latest thread list and set it.
+  // Custom input handler with image support - using Cloudinary URLs
+  const handleSendMessage = async (text: string, images?: ImageAttachment[]) => {
+    if ((!text.trim() && (!images || images.length === 0)) || isLoading || !user?.id) return;
 
     const shouldFetchThreadAfter = !currentThread;
 
-    // Send message via AI SDK
+    // Use createMessageContent with Cloudinary URLs
+    const messageContent = chatAPI.createMessageContent(text, images);
+
     await append({
       role: 'user',
-      content: text,
+      content: messageContent as any,
     });
 
-    // If we didn't have a thread yet, fetch the most recent thread so the UI updates.
     if (shouldFetchThreadAfter && user?.id) {
-      try {
-        // Give the backend a moment to create & update the thread
-        setTimeout(async () => {
+      setTimeout(async () => {
+        try {
           const { threads } = await chatAPI.getThreads(user.id, 1, 0, false);
           if (threads && threads.length > 0) {
             setCurrentThread(threads[0]);
             bump();
           }
-        }, 1500);
-      } catch (err) {
-        console.warn('Failed to fetch latest thread:', err);
-      }
+        } catch (err) {
+          console.warn('Failed to fetch latest thread:', err);
+        }
+      }, 1500);
     }
   };
 

@@ -1,25 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { useColorScheme } from '@/lib/use-color-scheme';
-import { generateConvexApiUrl } from '@/lib/convex-utils';
-
-interface DisplayModel {
-  key: string;
-  id: string;
-  name: string;
-  description: string;
-  provider: string;
-  providerDisplayName: string;
-  providerIcon: string;
-  providerColor: string;
-  supportsVision: boolean;
-  supportsTools: boolean;
-  contextWindow: number;
-  maxTokens: number;
-  temperature: number;
-  outputTokens: number;
-}
+import { useModelsStore, DisplayModel } from '@/store/models-store';
 
 interface ModelPickerProps {
   selectedModel: string;
@@ -27,9 +10,8 @@ interface ModelPickerProps {
 }
 
 export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onModelChange }) => {
-  const [models, setModels] = useState<DisplayModel[]>([]);
-  const [loading, setLoading] = useState(false);
   const { isDarkColorScheme } = useColorScheme();
+  const { models, isLoading, error, fetchModels } = useModelsStore();
 
   // Theme colors
   const colors = {
@@ -41,37 +23,22 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onModel
   // Fetch models on component mount
   useEffect(() => {
     fetchModels();
-  }, []);
+  }, [fetchModels]);
 
-  const fetchModels = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(generateConvexApiUrl('/api/models'));
-      const data = await response.json();
-
-      if (response.ok) {
-        // Sort models by provider, then by name
-        const sortedModels = data.models.sort((a: DisplayModel, b: DisplayModel) => {
-          if (a.provider !== b.provider) {
-            return a.provider.localeCompare(b.provider);
-          }
-          return a.name.localeCompare(b.name);
-        });
-        setModels(sortedModels);
-      } else {
-        console.error('Failed to fetch models:', data.error);
-      }
-    } catch (error) {
-      console.error('Error fetching models:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <View className='flex-1 justify-center'>
         <Text style={{ color: colors.text, fontSize: 12, textAlign: 'center' }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View className='flex-1 justify-center'>
+        <Text style={{ color: colors.text, fontSize: 12, textAlign: 'center' }}>
+          Error loading models
+        </Text>
       </View>
     );
   }

@@ -1,25 +1,33 @@
 import { v } from 'convex/values';
 
-// Base message content types
-export const MessageContent = v.union(
-  v.string(),
-  v.object({
-    type: v.literal('text'),
-    text: v.string(),
-  }),
-  v.object({
-    type: v.literal('image'),
-    url: v.string(),
-    alt: v.optional(v.string()),
-  }),
-  v.object({
-    type: v.literal('file'),
-    url: v.string(),
-    fileName: v.string(),
-    fileSize: v.optional(v.number()),
-    mimeType: v.optional(v.string()),
-  })
-);
+// Individual content part types (compatible with AI SDK format)
+export const TextContentPart = v.object({
+  type: v.literal('text'),
+  text: v.string(),
+});
+
+export const ImageContentPart = v.object({
+  type: v.literal('image'),
+  url: v.string(),
+  alt: v.optional(v.string()),
+});
+
+export const FileContentPart = v.object({
+  type: v.literal('file'),
+  url: v.string(),
+  fileName: v.string(),
+  fileSize: v.optional(v.number()),
+  mimeType: v.optional(v.string()),
+});
+
+// Content part union
+export const ContentPart = v.union(TextContentPart, ImageContentPart, FileContentPart);
+
+// Message content can be:
+// 1. Simple string (legacy support)
+// 2. Single content part object
+// 3. Array of content parts (AI SDK compatible for mixed content)
+export const MessageContent = v.union(v.string(), ContentPart, v.array(ContentPart));
 
 // Message metadata for AI-related information
 export const MessageMetadata = v.object({

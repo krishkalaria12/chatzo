@@ -71,24 +71,55 @@ export const compressConversationContext = action({
         }
       );
 
+      // Helper function to extract text content from complex message content
+      const extractTextContent = (content: any): string => {
+        if (typeof content === 'string') {
+          return content;
+        }
+
+        // Handle array of content parts (mixed text and images)
+        if (Array.isArray(content)) {
+          return content
+            .map((part: any) => {
+              if (typeof part === 'string') return part;
+              if (part.type === 'text') return part.text;
+              if (part.type === 'image') return `[Image: ${part.alt || part.url}]`;
+              if (part.type === 'file') return `[File: ${part.fileName}]`;
+              return String(part);
+            })
+            .filter(Boolean) // Remove empty strings
+            .join(' ');
+        }
+
+        // Handle single content object
+        if (typeof content === 'object' && content.type) {
+          switch (content.type) {
+            case 'text':
+              return content.text;
+            case 'image':
+              return `[Image: ${content.alt || content.url}]`;
+            case 'file':
+              return `[File: ${content.fileName}]`;
+            default:
+              return String(content);
+          }
+        }
+
+        return String(content);
+      };
+
       // Combine existing + new messages
       const allMessages: ProcessedMessage[] = [
         ...existingMessages.map(
           (msg: any): ProcessedMessage => ({
             role: msg.role,
-            content:
-              typeof msg.content === 'string'
-                ? msg.content
-                : msg.content?.text || String(msg.content),
+            content: extractTextContent(msg.content),
           })
         ),
         ...newMessages.map(
           (msg: any): ProcessedMessage => ({
             role: msg.role,
-            content:
-              typeof msg.content === 'string'
-                ? msg.content
-                : msg.content?.text || String(msg.content),
+            content: extractTextContent(msg.content),
           })
         ),
       ];
@@ -181,49 +212,54 @@ export const compressConversationContext = action({
 });
 
 /**
- * Generate title for a chat thread - ALWAYS using gemini-2.0-flash
+ * Generate title for a chat thread - with multimodal support (Cloudinary URLs only)
  */
 export const generateThreadTitle = action({
   args: {
-    messages: v.array(v.string()),
+    messages: v.array(v.any()), // Accept full message objects (can include images)
   },
   handler: async (ctx, args) => {
     const { messages } = args;
 
     try {
-      const { generateObject } = await import('ai');
-      const { z } = await import('zod');
+      const { generateText } = await import('ai');
       const { google } = await import('@ai-sdk/google');
+      const { TITLE_GENERATION_SYSTEM_PROMPT, FALLBACK_TITLE } = await import(
+        '../config/title_prompts'
+      );
 
       // Always use gemini-2.0-flash for title generation
       const model = google('gemini-2.0-flash');
 
-      const prompt = `Generate a concise, descriptive title (2-6 words) for this conversation:\n\n${messages
-        .slice(0, 3)
-        .map((msg, i) => `Message ${i + 1}: ${msg}`)
-        .join('\n')}`;
-
-      const { object } = await generateObject({
+      // Use generateText with multimodal support
+      const { text } = await generateText({
         model,
-        schema: z.object({
-          title: z
-            .string()
-            .describe('A concise, descriptive title for the conversation (2-6 words)'),
-        }),
-        prompt,
+        system: TITLE_GENERATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: messages,
+          },
+        ],
         temperature: 0.3,
-        maxTokens: 50,
+        maxTokens: 20, // Very short for title generation
       });
 
-      return {
-        title: object.title,
-      };
+      // Clean and validate the generated title
+      const cleanTitle = text.trim().replace(/['"]/g, '');
+      const wordCount = cleanTitle.split(' ').length;
+
+      // Ensure title is within 2-6 words
+      if (wordCount >= 2 && wordCount <= 6) {
+        return { title: cleanTitle };
+      }
+
+      // Fallback: always use 'New Chat'
+      return { title: FALLBACK_TITLE };
     } catch (error) {
-      console.error('Title generation error:', error);
-      // Simple fallback title generation
-      const topics = ['Chat', 'Discussion', 'Conversation', 'Question', 'Help'];
+      // Fallback: always use 'New Chat'
       return {
-        title: topics[Math.floor(Math.random() * topics.length)],
+        title: 'New Chat',
       };
     }
   },

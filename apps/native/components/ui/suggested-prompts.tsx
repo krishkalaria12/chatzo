@@ -12,21 +12,21 @@ interface SuggestedPromptsProps {
 const SUGGESTED_PROMPTS = [
   {
     id: 1,
+    text: 'Upload an image and ask me about it',
+    icon: 'image' as keyof typeof MaterialIcons.glyphMap,
+    category: 'Vision',
+  },
+  {
+    id: 2,
     text: 'Are black holes real?',
     icon: 'explore' as keyof typeof MaterialIcons.glyphMap,
     category: 'Science',
   },
   {
-    id: 2,
+    id: 3,
     text: 'How many Rs are in the word "strawberry"?',
     icon: 'quiz' as keyof typeof MaterialIcons.glyphMap,
     category: 'Language',
-  },
-  {
-    id: 3,
-    text: 'What is the meaning of life?',
-    icon: 'lightbulb' as keyof typeof MaterialIcons.glyphMap,
-    category: 'Philosophy',
   },
   {
     id: 4,
