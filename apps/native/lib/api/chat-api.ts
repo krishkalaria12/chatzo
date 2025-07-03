@@ -109,14 +109,10 @@ class ChatAPI {
     // Add image parts if present - use Cloudinary URLs
     if (images && images.length > 0) {
       for (const image of images) {
-        // Use Cloudinary URL if available, otherwise fall back to URI
-        const imageUrl = image.cloudinaryPublicId
-          ? `https://res.cloudinary.com/dgchynkag/image/upload/${image.cloudinaryPublicId}`
-          : image.uri;
-
+        // The `uri` now holds the full Cloudinary URL after upload
         parts.push({
           type: 'image',
-          url: imageUrl,
+          url: image.uri,
           alt: image.name,
         });
       }

@@ -2,6 +2,7 @@ import { action, mutation, query } from '../_generated/server';
 import { ConvexError, v } from 'convex/values';
 import { getUserIdFromClerkId } from './middleware';
 import { api } from '../_generated/api';
+import { MessageContent } from '../schemas/message';
 
 // Define message type for better typing
 interface ProcessedMessage {
@@ -235,12 +236,7 @@ export const generateThreadTitle = action({
       const { text } = await generateText({
         model,
         system: TITLE_GENERATION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: messages,
-          },
-        ],
+        messages,
         temperature: 0.3,
         maxTokens: 20, // Very short for title generation
       });
@@ -397,7 +393,7 @@ export const saveMessage = mutation({
   args: {
     threadId: v.id('threads'),
     role: v.union(v.literal('user'), v.literal('assistant'), v.literal('system')),
-    content: v.any(),
+    content: MessageContent,
     metadata: v.any(),
   },
   handler: async (ctx, args) => {

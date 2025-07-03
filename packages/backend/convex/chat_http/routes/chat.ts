@@ -193,16 +193,32 @@ export const completions = httpAction(async (ctx, request) => {
           try {
             const promises = [];
 
-            // Save user message - SIMPLE
+            // Save user message - MULTIMODAL
             if (messages.length > 0) {
-              promises.push(
-                ctx.runMutation(api.services.chat_service.saveMessage, {
-                  threadId: currentThreadId,
-                  role: 'user',
-                  content: messages[messages.length - 1]?.content || '',
-                  metadata: {},
-                })
-              );
+              const userMessage = messages[messages.length - 1];
+              if (userMessage) {
+                let contentToSave = userMessage.content;
+
+                // Handle case where content is an array of parts
+                if (Array.isArray(contentToSave)) {
+                  contentToSave = contentToSave.map(part => {
+                    // Normalize image part to match schema (url property)
+                    if (part.type === 'image' && part.image && !part.url) {
+                      return { ...part, url: part.image };
+                    }
+                    return part;
+                  });
+                }
+
+                promises.push(
+                  ctx.runMutation(api.services.chat_service.saveMessage, {
+                    threadId: currentThreadId,
+                    role: 'user',
+                    content: contentToSave,
+                    metadata: {},
+                  })
+                );
+              }
             }
 
             // Save assistant message

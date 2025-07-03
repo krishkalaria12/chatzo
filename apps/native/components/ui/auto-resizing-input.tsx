@@ -235,6 +235,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
             img.id === newImage.id
               ? {
                   ...img,
+                  uri: result.secure_url, // Use the full Cloudinary URL from response
                   cloudinaryPublicId: result.public_id,
                   isUploading: false,
                   uploadProgress: 100,
@@ -295,7 +296,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       if (!hasPermission) return;
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         quality: 0.8,
         allowsEditing: false,
         aspect: undefined,
@@ -335,7 +336,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       const remainingSlots = maxImages - images.length;
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsMultipleSelection: remainingSlots > 1,
         quality: 0.8,
         allowsEditing: false,

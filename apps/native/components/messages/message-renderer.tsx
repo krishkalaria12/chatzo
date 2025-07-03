@@ -27,31 +27,6 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
   const isUser = message.role === 'user';
   const isAssistant = message.role === 'assistant';
 
-  // Helper function to get text content from MessageContent
-  const getTextContent = (content: MessageContent): string => {
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    // Handle single ContentPart
-    if (!Array.isArray(content) && content.type === 'text') {
-      return content.text;
-    }
-
-    // Handle array of ContentParts - find first text part
-    if (Array.isArray(content)) {
-      const textPart = content.find(part => part.type === 'text');
-      return textPart?.type === 'text' ? textPart.text : '';
-    }
-
-    return '';
-  };
-
-  // Helper function to check if content is simple text
-  const isSimpleText = (content: MessageContent): boolean => {
-    return typeof content === 'string' || (!Array.isArray(content) && content.type === 'text');
-  };
-
   // Enhanced image content renderer using the EnhancedImage component
   const renderImageContent = (content: { type: 'image'; url: string; alt?: string }) => {
     const maxWidth = screenWidth * (isUser ? 0.6 : 0.7); // Smaller for user messages
@@ -135,39 +110,81 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
     );
   };
 
-  // Enhanced content renderer with proper type handling
-  const renderContent = (content: MessageContent) => {
-    if (typeof content === 'string') {
-      return content;
-    }
-
-    // Handle array content (multiple parts)
-    if (Array.isArray(content)) {
-      return (
-        <View>
-          {content.map((part, index) => (
-            <View key={index}>{renderContentPart(part)}</View>
-          ))}
-        </View>
-      );
-    }
-
-    // Handle single content part
-    return renderContentPart(content);
-  };
-
   // Helper to render individual content parts
   const renderContentPart = (part: ContentPart) => {
     switch (part.type) {
       case 'text':
-        return part.text;
+        // User text is plain, assistant text can be markdown
+        if (isUser) {
+          return (
+            <Text
+              className={cn('font-nunito')}
+              style={{
+                color: isDarkColorScheme
+                  ? CHATZO_COLORS.dark.background
+                  : CHATZO_COLORS.light.background,
+                fontSize: 15,
+                lineHeight: 21,
+                fontWeight: '500',
+              }}
+            >
+              {part.text}
+            </Text>
+          );
+        }
+        return <MarkdownContent content={part.text} />;
       case 'image':
         return renderImageContent(part);
       case 'file':
         return renderFileContent(part);
       default:
-        return 'Unsupported content type';
+        return <Text style={{ color: theme.text }}>Unsupported content type</Text>;
     }
+  };
+
+  // Enhanced content renderer with proper type handling
+  const renderContent = (content: MessageContent) => {
+    // For simple string content
+    if (typeof content === 'string') {
+      if (isUser) {
+        return (
+          <Text
+            className={cn('font-nunito')}
+            style={{
+              color: isDarkColorScheme
+                ? CHATZO_COLORS.dark.background
+                : CHATZO_COLORS.light.background,
+              fontSize: 15,
+              lineHeight: 21,
+              fontWeight: '500',
+            }}
+          >
+            {content}
+          </Text>
+        );
+      }
+      return <MarkdownContent content={content} />;
+    }
+
+    // For array content (multiple parts)
+    if (Array.isArray(content)) {
+      return (
+        <View>
+          {content.map((part, index) => {
+            // Add margin between parts for better spacing
+            const partStyle = index > 0 ? { marginTop: 8 } : {};
+            return (
+              <View key={index} style={partStyle}>
+                {renderContentPart(part)}
+              </View>
+            );
+          })}
+        </View>
+      );
+    }
+
+    // For single content part object
+    return renderContentPart(content);
   };
 
   // User message styling - with background, right aligned
@@ -186,23 +203,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
               elevation: 2,
             }}
           >
-            {isSimpleText(message.content) ? (
-              <Text
-                className={cn('font-nunito')}
-                style={{
-                  color: isDarkColorScheme
-                    ? CHATZO_COLORS.dark.background
-                    : CHATZO_COLORS.light.background,
-                  fontSize: 15,
-                  lineHeight: 21,
-                  fontWeight: '500',
-                }}
-              >
-                {getTextContent(message.content)}
-              </Text>
-            ) : (
-              <View>{renderContent(message.content)}</View>
-            )}
+            {renderContent(message.content)}
           </View>
         </View>
       </View>
@@ -213,13 +214,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
   if (isAssistant) {
     return (
       <View className={cn('mb-4 px-4')}>
-        <View className={cn('w-full')}>
-          {isSimpleText(message.content) ? (
-            <MarkdownContent content={getTextContent(message.content)} />
-          ) : (
-            <View>{renderContent(message.content)}</View>
-          )}
-        </View>
+        <View className={cn('w-full')}>{renderContent(message.content)}</View>
       </View>
     );
   }
@@ -239,7 +234,8 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
             color: theme.textSecondary,
           }}
         >
-          {getTextContent(message.content)}
+          {/* System messages are assumed to be simple text for now */}
+          {typeof message.content === 'string' ? message.content : 'System message'}
         </Text>
       </View>
     </View>
