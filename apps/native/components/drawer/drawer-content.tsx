@@ -155,6 +155,25 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     [threads]
   );
 
+  // Handle thread title editing
+  const handleThreadEdit = useCallback(
+    async (threadId: string, newTitle: string) => {
+      if (!user?.id) return;
+
+      try {
+        await chatAPI.updateThreadTitle(user.id, threadId, newTitle);
+
+        // Update thread in local state
+        setThreads(prev =>
+          prev.map(t => (t._id === threadId ? { ...t, title: newTitle, updatedAt: Date.now() } : t))
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update thread title');
+      }
+    },
+    [user?.id]
+  );
+
   const handleDeleteConfirm = useCallback(async () => {
     if (!threadToDelete || !user?.id) return;
 
@@ -224,6 +243,7 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
             currentThreadId={currentThreadId}
             onThreadSelect={handleThreadSelect}
             onThreadDelete={handleThreadDelete}
+            onThreadEdit={handleThreadEdit}
             onRetry={handleRetry}
             onRefresh={handleRefresh}
             refreshing={refreshing}

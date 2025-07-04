@@ -554,3 +554,66 @@ export const deleteThread = httpAction(async (ctx, request) => {
     );
   }
 });
+
+/**
+ * PUT /api/chat/threads/:threadId
+ * Update a specific conversation thread (currently supports title updates)
+ */
+export const updateThread = httpAction(async (ctx, request) => {
+  try {
+    const url = new URL(request.url);
+    const clerkId = url.searchParams.get('clerkId');
+    const threadId = url.pathname.split('/')[4];
+
+    // Get internal userId from clerkId
+    if (!clerkId) {
+      return createErrorResponse('clerkId parameter is required', 400);
+    }
+
+    const userId = await getUserIdFromClerkId(ctx, clerkId);
+    if (!userId) {
+      return createErrorResponse('Invalid clerkId or user not found', 401);
+    }
+
+    if (!threadId) {
+      return createErrorResponse('Thread ID is required', 400);
+    }
+
+    const body = await parseRequestBody(request);
+    const { title } = body;
+
+    if (!title || typeof title !== 'string') {
+      return createErrorResponse('Title is required and must be a string', 400);
+    }
+
+    const result = await ctx.runMutation(api.services.chat_service.updateThreadTitleWithAuth, {
+      threadId: threadId as any,
+      title,
+      clerkId,
+    });
+
+    return createSuccessResponse({
+      message: 'Thread updated successfully',
+      threadId: result.threadId,
+      title: result.title,
+    });
+  } catch (error) {
+    console.error('Update thread error:', error);
+
+    if (error instanceof ConvexError && error.message.includes('access denied')) {
+      return createErrorResponse('Thread not found or access denied', 404);
+    }
+
+    if (
+      error instanceof ConvexError &&
+      (error.message.includes('empty') || error.message.includes('exceed'))
+    ) {
+      return createErrorResponse(error.message, 400);
+    }
+
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Failed to update thread',
+      500
+    );
+  }
+});

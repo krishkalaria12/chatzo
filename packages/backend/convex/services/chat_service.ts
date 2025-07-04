@@ -316,6 +316,45 @@ export const updateThreadTitle = mutation({
 });
 
 /**
+ * Update thread title with user authorization
+ */
+export const updateThreadTitleWithAuth = mutation({
+  args: {
+    threadId: v.id('threads'),
+    title: v.string(),
+    clerkId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { threadId, title, clerkId } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
+
+    // Verify user has access to this thread
+    const thread = await ctx.db.get(threadId);
+    if (!thread || thread.userId !== user._id) {
+      throw new ConvexError('Thread not found or access denied');
+    }
+
+    // Validate title length and content
+    const trimmedTitle = title.trim();
+    if (trimmedTitle.length === 0) {
+      throw new ConvexError('Title cannot be empty');
+    }
+    if (trimmedTitle.length > 100) {
+      throw new ConvexError('Title cannot exceed 100 characters');
+    }
+
+    await ctx.db.patch(threadId, {
+      title: trimmedTitle,
+      updatedAt: Date.now(),
+    });
+
+    return { threadId, title: trimmedTitle };
+  },
+});
+
+/**
  * Get threads for a user
  */
 export const getUserThreads = query({

@@ -18,6 +18,7 @@ interface EnhancedThreadListProps {
   currentThreadId?: string;
   onThreadSelect: (thread: Thread) => void;
   onThreadDelete?: (threadId: string) => void;
+  onThreadEdit?: (threadId: string, newTitle: string) => void;
   onRetry: () => void;
   onRefresh?: () => void;
   refreshing?: boolean;
@@ -47,6 +48,7 @@ const arePropsEqual = (prevProps: EnhancedThreadListProps, nextProps: EnhancedTh
     prevProps.currentThreadId === nextProps.currentThreadId &&
     prevProps.refreshing === nextProps.refreshing &&
     prevProps.onThreadDelete === nextProps.onThreadDelete &&
+    prevProps.onThreadEdit === nextProps.onThreadEdit &&
     prevProps.threads.length === nextProps.threads.length &&
     prevProps.threads.every(
       (thread, index) =>
@@ -65,6 +67,7 @@ export const EnhancedThreadList = React.memo<EnhancedThreadListProps>(
     currentThreadId,
     onThreadSelect,
     onThreadDelete,
+    onThreadEdit,
     onRetry,
     onRefresh,
     refreshing = false,
@@ -125,6 +128,7 @@ export const EnhancedThreadList = React.memo<EnhancedThreadListProps>(
                 });
               }}
               onDelete={onThreadDelete}
+              onEdit={onThreadEdit}
             />
           );
         } catch (error) {
@@ -132,7 +136,7 @@ export const EnhancedThreadList = React.memo<EnhancedThreadListProps>(
           return <View style={{ height: 60 }} />; // Fallback view
         }
       },
-      [currentThreadId, onThreadSelect, onThreadDelete]
+      [currentThreadId, onThreadSelect, onThreadDelete, onThreadEdit]
     );
 
     // Stable key extractor

@@ -401,6 +401,39 @@ class ChatAPI {
 
     return data;
   }
+
+  /**
+   * Update a thread's title
+   */
+  async updateThreadTitle(
+    clerkId: string,
+    threadId: string,
+    title: string
+  ): Promise<{
+    message: string;
+    threadId: string;
+    title: string;
+  }> {
+    const params = new URLSearchParams({
+      clerkId,
+    });
+
+    const response = await fetch(`${this.baseUrl}/api/chat/threads/${threadId}?${params}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to update thread title');
+    }
+
+    return data;
+  }
 }
 
 // Export singleton instance
