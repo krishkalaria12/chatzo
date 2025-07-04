@@ -1,5 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { View, TextInput, Text, TouchableOpacity, Platform, Alert, Linking } from 'react-native';
+import {
+  View,
+  TextInput,
+  Text,
+  TouchableOpacity,
+  Platform,
+  Alert,
+  Linking,
+  TouchableWithoutFeedback,
+  Keyboard,
+} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -54,21 +64,22 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   const inputRef = useRef<TextInput>(null);
   const { isDarkColorScheme } = useColorScheme();
 
-  // Theme colors
+  // Theme colors with better contrast
   const colors = {
-    container: isDarkColorScheme ? '#27272a' : '#f4f4f5',
-    border: isDarkColorScheme ? '#3f3f46' : '#e4e4e7',
-    text: isDarkColorScheme ? '#fafafa' : '#09090b',
-    placeholder: isDarkColorScheme ? '#9ca3af' : '#71717a',
-    icon: isDarkColorScheme ? '#9ca3af' : '#71717a',
+    container: isDarkColorScheme ? '#1f2937' : '#f8fafc',
+    border: isDarkColorScheme ? '#374151' : '#e2e8f0',
+    text: isDarkColorScheme ? '#f9fafb' : '#1e293b',
+    placeholder: isDarkColorScheme ? '#9ca3af' : '#64748b',
+    icon: isDarkColorScheme ? '#9ca3af' : '#64748b',
     sendButton: {
-      active: isDarkColorScheme ? '#ffffff' : '#09090b',
-      inactive: isDarkColorScheme ? '#3f3f46' : '#d4d4d8',
+      active: isDarkColorScheme ? '#3b82f6' : '#2563eb',
+      inactive: isDarkColorScheme ? '#374151' : '#cbd5e1',
     },
     sendText: {
-      active: isDarkColorScheme ? '#000000' : '#ffffff',
-      inactive: isDarkColorScheme ? '#9ca3af' : '#71717a',
+      active: '#ffffff',
+      inactive: isDarkColorScheme ? '#6b7280' : '#64748b',
     },
+    modelSection: isDarkColorScheme ? '#111827' : '#ffffff',
   };
 
   // Animation for send button press
@@ -383,206 +394,221 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
     inputRef.current?.focus();
   };
 
-  // Container height = input height + padding for icons/buttons + model picker
-  const baseHeight = inputHeight + 90; // Reduced height for native picker
-  const imagePreviewHeight = images.length > 0 ? 140 : 0; // Height for image preview
-  const warningHeight = modelWarning ? 40 : 0; // Height for warning section
-  const containerHeight = baseHeight + imagePreviewHeight + warningHeight;
+  // Calculate container height with proper spacing
+  const modelSectionHeight = 50; // Fixed height for model picker
+  const imagePreviewHeight = images.length > 0 ? 140 : 0;
+  const warningHeight = modelWarning ? 45 : 0;
+  const inputSectionHeight = Math.max(inputHeight + 60, 100); // Ensure minimum height
+  const totalHeight = modelSectionHeight + imagePreviewHeight + warningHeight + inputSectionHeight;
 
-  // Simple animated styles - only animate scale, not height to avoid conflict with KeyboardAvoidingView
+  // Simple animated styles
   const animatedContainerStyle = useAnimatedStyle(() => {
-    const scale = interpolate(animationProgress.value, [0, 1], [1, 0.95]);
+    const scale = interpolate(animationProgress.value, [0, 1], [1, 0.98]);
     return {
       transform: [{ scale }],
     };
   });
 
   return (
-    <View className={cn('px-4 pb-6 pt-1')}>
-      <Animated.View
-        style={[
-          animatedContainerStyle,
-          {
-            height: containerHeight,
-            backgroundColor: colors.container,
-            borderColor: colors.border,
-          },
-        ]}
-        className={cn('overflow-hidden rounded-2xl')}
-      >
-        {/* Model Selector */}
-        <View className={cn('px-4 py-2 border-b')} style={{ borderColor: colors.border }}>
-          <View className={cn('flex-row items-center justify-between')}>
-            <Text className={cn('text-xs font-medium')} style={{ color: colors.icon }}>
-              Model
-            </Text>
-            <View className={cn('flex-1 ml-3')}>
-              <ModelPicker
-                selectedModel={selectedModel}
-                onModelChange={onModelChange || (() => {})}
-              />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View className='px-4 pb-6 pt-2'>
+        <Animated.View
+          style={[
+            animatedContainerStyle,
+            {
+              height: totalHeight,
+              backgroundColor: colors.container,
+              borderColor: colors.border,
+            },
+          ]}
+          className='overflow-hidden rounded-2xl border'
+        >
+          {/* Model Selector - Fixed height section */}
+          <View
+            style={{
+              backgroundColor: colors.modelSection,
+              borderBottomColor: colors.border,
+              height: modelSectionHeight,
+            }}
+            className='border-b px-4 py-2 justify-center'
+          >
+            <View className='flex-row items-center'>
+              <Text style={{ color: colors.icon }} className='text-xs font-medium w-12'>
+                Model
+              </Text>
+              <View className='flex-1 ml-2'>
+                <ModelPicker
+                  selectedModel={selectedModel}
+                  onModelChange={onModelChange || (() => {})}
+                />
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Model Warning Section */}
-        {modelWarning && (
-          <View
-            className={cn('px-4 py-2 border-b')}
-            style={{
-              borderColor: colors.border,
-              backgroundColor: isDarkColorScheme ? '#7f1d1d' : '#fef2f2',
-            }}
-          >
-            <View className={cn('flex-row items-center')}>
+          {/* Model Warning Section */}
+          {modelWarning && (
+            <View
+              style={{
+                borderBottomColor: colors.border,
+                backgroundColor: isDarkColorScheme ? '#7f1d1d' : '#fef2f2',
+                height: warningHeight,
+              }}
+              className='border-b px-4 py-2 justify-center'
+            >
               <Text
                 style={{
                   fontSize: 12,
                   color: isDarkColorScheme ? '#fca5a5' : '#dc2626',
-                  flex: 1,
                 }}
                 numberOfLines={2}
               >
                 ⚠️ {modelWarning}
               </Text>
             </View>
-          </View>
-        )}
+          )}
 
-        {/* Image Preview Section */}
-        {images.length > 0 && (
-          <View className={cn('px-4 py-2 border-b')} style={{ borderColor: colors.border }}>
-            <ImagePreview
-              images={images}
-              onDeleteImage={handleDeleteImage}
-              showProgress={true}
-              editable={!disabled}
-            />
-          </View>
-        )}
-
-        {/* Input area */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={handleInputContainerPress}
-          className={cn('flex-1 px-6 py-3')}
-        >
-          <TextInput
-            ref={inputRef}
-            value={text}
-            onChangeText={handleTextChange}
-            onContentSizeChange={handleContentSizeChange}
-            onKeyPress={handleKeyPress}
-            placeholder={placeholder}
-            placeholderTextColor={colors.placeholder}
-            multiline
-            textAlignVertical='top'
-            editable={!disabled}
-            style={{
-              fontSize: 16,
-              lineHeight: 22,
-              height: inputHeight,
-              color: colors.text,
-              paddingTop: 0,
-              paddingBottom: 0,
-              ...(Platform.OS === 'android' && {
-                textAlignVertical: 'top',
-              }),
-              // Remove focus outline/border
-              ...(Platform.OS === 'web' && {
-                outline: 'none',
-                border: 'none',
-                resize: 'none',
-              }),
-            }}
-          />
-        </TouchableOpacity>
-
-        {/* Bottom section */}
-        <View className={cn('flex-row items-center justify-between px-4 py-2')}>
-          {/* Icons */}
-          <View className={cn('flex-row items-center')}>
-            {/* Camera Button */}
-            <TouchableOpacity
-              className={cn('p-2 mr-2')}
-              onPress={handleCameraPress}
-              disabled={disabled || isPickingImages}
+          {/* Image Preview Section */}
+          {images.length > 0 && (
+            <View
               style={{
-                opacity: disabled || isPickingImages ? 0.5 : 1,
+                borderBottomColor: colors.border,
+                height: imagePreviewHeight,
               }}
+              className='border-b px-4 py-2'
             >
-              <Camera
-                size={20}
-                color={disabled || isPickingImages ? colors.placeholder : colors.icon}
+              <ImagePreview
+                images={images}
+                onDeleteImage={handleDeleteImage}
+                showProgress={true}
+                editable={!disabled}
               />
-            </TouchableOpacity>
+            </View>
+          )}
 
-            {/* Gallery Button */}
+          {/* Input area */}
+          <View className='flex-1 px-4 py-3'>
             <TouchableOpacity
-              className={cn('p-2 mr-2')}
-              onPress={handleGalleryPress}
-              disabled={disabled || isPickingImages}
-              style={{
-                opacity: disabled || isPickingImages ? 0.5 : 1,
-              }}
+              activeOpacity={1}
+              onPress={handleInputContainerPress}
+              className='flex-1'
             >
-              <ImageIcon
-                size={20}
-                color={disabled || isPickingImages ? colors.placeholder : colors.icon}
-              />
-            </TouchableOpacity>
-
-            {/* Image count indicator */}
-            {images.length > 0 && (
-              <View
+              <TextInput
+                ref={inputRef}
+                value={text}
+                onChangeText={handleTextChange}
+                onContentSizeChange={handleContentSizeChange}
+                onKeyPress={handleKeyPress}
+                placeholder={placeholder}
+                placeholderTextColor={colors.placeholder}
+                multiline
+                textAlignVertical='top'
+                editable={!disabled}
                 style={{
-                  backgroundColor: colors.sendButton.active,
-                  borderRadius: 10,
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  marginRight: 8,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  minHeight: inputHeight,
+                  color: colors.text,
+                  paddingTop: 0,
+                  paddingBottom: 0,
+                  ...(Platform.OS === 'android' && {
+                    textAlignVertical: 'top',
+                  }),
+                  ...(Platform.OS === 'web' && {
+                    outline: 'none',
+                    border: 'none',
+                    resize: 'none',
+                  }),
+                }}
+              />
+            </TouchableOpacity>
+
+            {/* Bottom section with icons and send button */}
+            <View className='flex-row items-center justify-between mt-3'>
+              {/* Left side icons */}
+              <View className='flex-row items-center'>
+                {/* Camera Button */}
+                <TouchableOpacity
+                  className='p-2 mr-2'
+                  onPress={handleCameraPress}
+                  disabled={disabled || isPickingImages}
+                  style={{
+                    opacity: disabled || isPickingImages ? 0.5 : 1,
+                  }}
+                >
+                  <Camera
+                    size={20}
+                    color={disabled || isPickingImages ? colors.placeholder : colors.icon}
+                  />
+                </TouchableOpacity>
+
+                {/* Gallery Button */}
+                <TouchableOpacity
+                  className='p-2 mr-2'
+                  onPress={handleGalleryPress}
+                  disabled={disabled || isPickingImages}
+                  style={{
+                    opacity: disabled || isPickingImages ? 0.5 : 1,
+                  }}
+                >
+                  <ImageIcon
+                    size={20}
+                    color={disabled || isPickingImages ? colors.placeholder : colors.icon}
+                  />
+                </TouchableOpacity>
+
+                {/* Image count indicator */}
+                {images.length > 0 && (
+                  <View
+                    style={{
+                      backgroundColor: colors.sendButton.active,
+                      borderRadius: 10,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      marginRight: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.sendText.active,
+                        fontSize: 12,
+                        fontWeight: '500',
+                      }}
+                    >
+                      {images.length}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Send button */}
+              <TouchableOpacity
+                onPress={handleSend}
+                disabled={disabled || (!text.trim() && images.length === 0)}
+                className='rounded-full px-4 py-2'
+                style={{
+                  backgroundColor:
+                    !disabled && (text.trim() || images.length > 0)
+                      ? colors.sendButton.active
+                      : colors.sendButton.inactive,
+                  opacity: disabled || (!text.trim() && images.length === 0) ? 0.5 : 1,
                 }}
               >
                 <Text
+                  className='font-medium'
                   style={{
-                    color: colors.sendText.active,
-                    fontSize: 12,
-                    fontWeight: '500',
+                    color:
+                      !disabled && (text.trim() || images.length > 0)
+                        ? colors.sendText.active
+                        : colors.sendText.inactive,
                   }}
                 >
-                  {images.length}
+                  Send
                 </Text>
-              </View>
-            )}
+              </TouchableOpacity>
+            </View>
           </View>
-
-          {/* Send button */}
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={disabled || (!text.trim() && images.length === 0)}
-            className={cn('rounded-full px-4 py-2')}
-            style={{
-              backgroundColor:
-                !disabled && (text.trim() || images.length > 0)
-                  ? colors.sendButton.active
-                  : colors.sendButton.inactive,
-              opacity: disabled || (!text.trim() && images.length === 0) ? 0.5 : 1,
-            }}
-          >
-            <Text
-              className={cn('font-medium')}
-              style={{
-                color:
-                  !disabled && (text.trim() || images.length > 0)
-                    ? colors.sendText.active
-                    : colors.sendText.inactive,
-              }}
-            >
-              Send
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </View>
+        </Animated.View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };

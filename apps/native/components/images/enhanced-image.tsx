@@ -135,48 +135,34 @@ export const EnhancedImage: React.FC<EnhancedImageProps> = memo(
 
     // Successful image render
     return (
-      <View>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handlePress}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={handlePress}
+        style={{
+          width: maxWidth,
+          height: maxHeight,
+          borderRadius,
+          overflow: 'hidden',
+          backgroundColor: theme.background,
+          ...(showShadow && {
+            shadowColor: isDarkColorScheme ? '#000' : '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: isDarkColorScheme ? 0.3 : 0.1,
+            shadowRadius: 4,
+            elevation: 3,
+          }),
+        }}
+      >
+        <Image
+          source={uri}
           style={{
-            borderRadius,
-            overflow: 'hidden',
-            backgroundColor: theme.background,
-            ...(showShadow && {
-              shadowColor: isDarkColorScheme ? '#000' : '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: isDarkColorScheme ? 0.3 : 0.1,
-              shadowRadius: 4,
-              elevation: 3,
-            }),
+            width: '100%',
+            height: '100%',
           }}
-        >
-          <Image
-            source={image}
-            style={{
-              width: imageSize.width,
-              height: imageSize.height,
-              backgroundColor: theme.background,
-            }}
-            contentFit='cover'
-            transition={transition}
-          />
-        </TouchableOpacity>
-        {alt && (
-          <Text
-            style={{
-              fontSize: 12,
-              color: theme.textSecondary,
-              marginTop: 6,
-              fontStyle: 'italic',
-              paddingHorizontal: 4,
-            }}
-          >
-            {alt}
-          </Text>
-        )}
-      </View>
+          contentFit='cover'
+          transition={transition}
+        />
+      </TouchableOpacity>
     );
   }
 );

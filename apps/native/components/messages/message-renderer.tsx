@@ -5,7 +5,7 @@ import { EnhancedImage } from '@/components/images';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import { MessageContent, ContentPart } from '@/lib/api/chat-api';
+import { MessageContent, ContentPart, ImageContentPart, TextContentPart } from '@/lib/api/chat-api';
 
 interface Message {
   id: string;
@@ -189,11 +189,35 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
 
   // User message styling - with background, right aligned
   if (isUser) {
+    const content = message.content;
+    const imageParts = (
+      Array.isArray(content) ? content.filter(part => part.type === 'image') : []
+    ) as ImageContentPart[];
+    const textParts = (
+      typeof content === 'string'
+        ? [{ type: 'text' as const, text: content }]
+        : Array.isArray(content)
+          ? content.filter(part => part.type === 'text')
+          : content.type === 'text'
+            ? [content]
+            : []
+    ) as TextContentPart[];
+
     return (
-      <View className={cn('mb-4 px-4')}>
-        <View className={cn('items-end')}>
+      <View className='mb-4 px-4 items-end'>
+        {/* Render images above the text bubble */}
+        {imageParts.length > 0 && (
+          <View className='flex-row flex-wrap justify-end gap-2 mb-2'>
+            {imageParts.map((part, index) => (
+              <View key={`img-${index}`}>{renderImageContent(part)}</View>
+            ))}
+          </View>
+        )}
+
+        {/* Render text bubble if there is text */}
+        {textParts.length > 0 && (
           <View
-            className={cn('px-4 py-3 rounded-2xl rounded-br-md max-w-[85%]')}
+            className='px-4 py-3 rounded-2xl rounded-br-md max-w-[85%]'
             style={{
               backgroundColor: theme.primary,
               shadowColor: isDarkColorScheme ? '#000' : theme.primary,
@@ -203,9 +227,24 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(({ message }
               elevation: 2,
             }}
           >
-            {renderContent(message.content)}
+            {textParts.map((part, index) => (
+              <Text
+                key={`txt-${index}`}
+                className='font-nunito'
+                style={{
+                  color: isDarkColorScheme
+                    ? CHATZO_COLORS.dark.background
+                    : CHATZO_COLORS.light.background,
+                  fontSize: 15,
+                  lineHeight: 21,
+                  fontWeight: '500',
+                }}
+              >
+                {part.text}
+              </Text>
+            ))}
           </View>
-        </View>
+        )}
       </View>
     );
   }
