@@ -1,7 +1,8 @@
 import React, { memo, forwardRef } from 'react';
-import { ScrollView, View, ActivityIndicator, Text } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { MessageRenderer } from './message-renderer';
 import { TypingShimmer } from '@/components/ui/shimmer-text';
+import { AssistantMessageSkeleton, UserMessageSkeleton } from './extra';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -33,20 +34,25 @@ export const MessageList = memo(
           message.role === 'user' || message.role === 'assistant' || message.role === 'system'
       );
 
-      // Loading indicator for initial message loading
+      // Skeleton placeholders while fetching conversation messages
       if (isLoadingMessages) {
         return (
-          <View className={cn('flex-1 justify-center items-center', className)}>
-            <ActivityIndicator size='large' color={theme.primary} className={cn('mb-3')} />
-            <Text
-              className={cn('text-base font-nunito')}
-              style={{
-                color: theme.textSecondary,
-              }}
-            >
-              Loading conversation...
-            </Text>
-          </View>
+          <ScrollView
+            className={cn('flex-1', className)}
+            contentContainerStyle={{
+              paddingVertical: 12,
+              flexGrow: 1,
+              justifyContent: 'flex-start',
+            }}
+            showsVerticalScrollIndicator={false}
+          >
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <React.Fragment key={idx}>
+                <AssistantMessageSkeleton />
+                <UserMessageSkeleton />
+              </React.Fragment>
+            ))}
+          </ScrollView>
         );
       }
 
