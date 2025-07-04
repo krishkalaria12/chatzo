@@ -21,6 +21,7 @@ import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { MessageList, MessageRenderer } from '@/components/messages';
 import { TypingShimmer } from '@/components/ui/shimmer-text';
+import { AssistantMessageSkeleton, UserMessageSkeleton } from '@/components/messages/extra';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread, MessageContent } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
@@ -332,11 +333,21 @@ export default function HomePage() {
                 <View className={cn('flex-1')}>
                   {/* Loading indicator for initial message loading */}
                   {isLoadingMessages && (
-                    <View className={cn('flex-1 justify-center items-center')}>
-                      <Text className={cn('text-base', 'text-gray-600 dark:text-gray-400')}>
-                        Loading conversation...
-                      </Text>
-                    </View>
+                    <ScrollView
+                      contentContainerStyle={{
+                        paddingVertical: 12,
+                        flexGrow: 1,
+                        justifyContent: 'flex-start',
+                      }}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {Array.from({ length: 3 }).map((_, idx) => (
+                        <React.Fragment key={idx}>
+                          <AssistantMessageSkeleton />
+                          <UserMessageSkeleton />
+                        </React.Fragment>
+                      ))}
+                    </ScrollView>
                   )}
 
                   {/* Messages */}

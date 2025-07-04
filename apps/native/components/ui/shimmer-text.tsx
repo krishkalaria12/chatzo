@@ -1,13 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ViewStyle, TextStyle } from 'react-native';
+import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withRepeat,
-  withSequence,
   withTiming,
-  interpolate,
-  Extrapolation,
+  withRepeat,
+  Easing,
 } from 'react-native-reanimated';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
@@ -18,9 +18,9 @@ interface ShimmerTextProps {
   className?: string;
   style?: ViewStyle;
   textStyle?: TextStyle;
-  shimmerColors?: [string, string, string];
-  duration?: number;
-  autoStart?: boolean;
+  duration?: number; // animation cycle duration (ms)
+  highlightColor?: string;
+  baseColor?: string;
 }
 
 export const ShimmerText: React.FC<ShimmerTextProps> = ({
@@ -28,87 +28,85 @@ export const ShimmerText: React.FC<ShimmerTextProps> = ({
   className,
   style,
   textStyle,
-  shimmerColors,
-  duration = 2000,
-  autoStart = true,
+  duration = 1800,
+  highlightColor,
+  baseColor,
 }) => {
   const { isDarkColorScheme } = useColorScheme();
   const theme = isDarkColorScheme ? CHATZO_COLORS.dark : CHATZO_COLORS.light;
 
-  // Animation value for shimmer effect
-  const shimmerValue = useSharedValue(0);
+  const [textWidth, setTextWidth] = useState(0);
 
-  // Default shimmer colors based on theme
-  const defaultShimmerColors: [string, string, string] = isDarkColorScheme
-    ? [theme.textSecondary, theme.text, theme.textSecondary]
-    : [theme.textSecondary, theme.primary, theme.textSecondary];
+  const translateX = useSharedValue(0);
 
-  const colors = shimmerColors || defaultShimmerColors;
+  // Colors
+  const _baseColor = baseColor || theme.textSecondary;
+  const _highlightColor = highlightColor || theme.primary;
 
   useEffect(() => {
-    if (autoStart) {
-      shimmerValue.value = withRepeat(
-        withSequence(
-          withTiming(1, { duration: duration / 2 }),
-          withTiming(0, { duration: duration / 2 })
-        ),
-        -1,
-        false
-      );
-    }
-  }, [autoStart, duration, shimmerValue]);
-
-  // Create animated style for shimmer effect
-  const animatedTextStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      shimmerValue.value,
-      [0, 0.5, 1],
-      [0.4, 1, 0.4],
-      Extrapolation.CLAMP
+    if (textWidth === 0) return;
+    // Start shimmer animation
+    translateX.value = withRepeat(
+      withTiming(textWidth, {
+        duration,
+        easing: Easing.linear,
+      }),
+      -1,
+      false
     );
+  }, [textWidth, duration, translateX]);
 
-    const color = interpolate(shimmerValue.value, [0, 0.5, 1], [0, 1, 0], Extrapolation.CLAMP);
-
-    // Interpolate between the shimmer colors
-    const r1 = parseInt(colors[0].slice(1, 3), 16);
-    const g1 = parseInt(colors[0].slice(3, 5), 16);
-    const b1 = parseInt(colors[0].slice(5, 7), 16);
-
-    const r2 = parseInt(colors[1].slice(1, 3), 16);
-    const g2 = parseInt(colors[1].slice(3, 5), 16);
-    const b2 = parseInt(colors[1].slice(5, 7), 16);
-
-    const r = Math.round(r1 + (r2 - r1) * color);
-    const g = Math.round(g1 + (g2 - g1) * color);
-    const b = Math.round(b1 + (b2 - b1) * color);
-
+  const animatedStyle = useAnimatedStyle(() => {
     return {
-      opacity,
-      color: `rgb(${r}, ${g}, ${b})`,
+      transform: [{ translateX: translateX.value }],
     };
   });
 
   return (
     <View className={className} style={style}>
-      <Animated.Text
-        className={cn('font-nunito')}
-        style={[
-          {
-            fontSize: 16,
-            fontWeight: '500',
-            letterSpacing: 0.5,
-          },
-          textStyle,
-          animatedTextStyle,
-        ]}
+      <MaskedView
+        maskElement={
+          <Text
+            onLayout={e => setTextWidth(e.nativeEvent.layout.width)}
+            numberOfLines={1}
+            className={cn('font-nunito')}
+            style={[
+              {
+                fontSize: 16,
+                fontWeight: '500',
+                letterSpacing: 0.5,
+                color: 'black', // mask color
+                opacity: 1,
+              },
+              textStyle,
+            ]}
+          >
+            {text}
+          </Text>
+        }
       >
-        {text}
-      </Animated.Text>
+        {/* Gradient that slides under the mask */}
+        {textWidth > 0 && (
+          <Animated.View
+            style={[{
+              width: textWidth * 2, // twice the width for seamless loop
+              height: '100%',
+            }, animatedStyle]}
+          >
+            <LinearGradient
+              colors={[_baseColor, _highlightColor, _baseColor]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={{ flex: 1 }}
+            />
+          </Animated.View>
+        )}
+      </MaskedView>
     </View>
   );
 };
 
-// Preset shimmer text components for common use cases
+// Preset shimmer text components
 export const TypingShimmer: React.FC<{ visible?: boolean }> = ({ visible = true }) => {
   if (!visible) return null;
 
