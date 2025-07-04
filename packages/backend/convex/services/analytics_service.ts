@@ -1,21 +1,6 @@
 import { query } from '../_generated/server';
-import { v, ConvexError } from 'convex/values';
-
-/**
- * Helper function to get user by clerkId
- */
-const getUserByClerkId = async (ctx: any, clerkId: string) => {
-  const user = await ctx.db
-    .query('users')
-    .withIndex('by_clerk_id', (q: any) => q.eq('clerkId', clerkId))
-    .unique();
-
-  if (!user) {
-    throw new ConvexError('User not found');
-  }
-
-  return user;
-};
+import { v } from 'convex/values';
+import { getUserByClerkId } from './user_service';
 
 /**
  * Get user usage statistics for analytics

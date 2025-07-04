@@ -3,16 +3,16 @@ import { getModels } from './ai';
 import { testEndpoint, testGoogleAI } from './test';
 import { httpAction } from './_generated/server';
 import { api } from './_generated/api';
+import { completions } from './chat_http/routes/chat';
 import {
-  completions,
   createThread,
-  getThreads,
-  getMessages,
-  generateTitle,
   deleteThread,
+  generateTitle,
+  getThreads,
   updateThread,
-} from './chat_http/routes/chat';
-import { getUserUsage, getModelUsage } from './chat_http/routes/analytics';
+} from './chat_http/routes/threads';
+import { getMessages } from './chat_http/routes/messages';
+import { getUserUsage, getModelUsage } from './api/routes/analytics';
 
 const http = httpRouter();
 

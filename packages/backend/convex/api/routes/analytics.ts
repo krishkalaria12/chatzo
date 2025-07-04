@@ -32,7 +32,7 @@ export const getUserUsage = httpAction(async (ctx, request) => {
 
     // Get usage statistics from service
     const usageStats = await ctx.runQuery(api.services.analytics_service.getUserUsageStats, {
-      userId,
+      clerkId,
       startTimestamp: startDate.getTime(),
       endTimestamp: endDate.getTime(),
       days,
@@ -75,7 +75,7 @@ export const getModelUsage = httpAction(async (ctx, request) => {
 
     // Get model usage statistics from service
     const modelUsage = await ctx.runQuery(api.services.analytics_service.getModelUsageStats, {
-      userId,
+      clerkId,
       startTimestamp: startDate.getTime(),
       endTimestamp: endDate.getTime(),
     });
