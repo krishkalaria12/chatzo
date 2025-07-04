@@ -1,7 +1,7 @@
 import React, { memo, forwardRef } from 'react';
 import { ScrollView, View, ActivityIndicator, Text } from 'react-native';
 import { MessageRenderer } from './message-renderer';
-import { AssistantMessageSkeleton } from './extra';
+import { TypingShimmer } from '@/components/ui/shimmer-text';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -99,7 +99,11 @@ export const MessageList = memo(
           ))}
 
           {/* Assistant typing indicator */}
-          {isLoading && <AssistantMessageSkeleton />}
+          {isLoading && (
+            <View className={cn('items-start mb-4 px-4')}>
+              <TypingShimmer visible={true} />
+            </View>
+          )}
         </ScrollView>
       );
     }
