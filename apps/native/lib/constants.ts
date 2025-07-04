@@ -83,6 +83,7 @@ export const CHATZO_COLORS = {
     textSecondary: '#71717A',
     primary: '#5B5E97',
     accent: '#FFC145',
+    destructive: '#EF4444',
   },
 
   dark: {
@@ -93,5 +94,6 @@ export const CHATZO_COLORS = {
     textSecondary: '#A1A1AA',
     primary: '#FFC145', // Changed to accent color for better visibility
     accent: '#FFC145',
+    destructive: '#EF4444',
   },
 };

@@ -7,6 +7,7 @@ import { useThreadVersion } from '@/store/thread-version-store';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { AppContainer } from '@/components/app-container';
+import { ConfirmationModal } from '@/components/ui/confirmation-modal';
 
 import { AppHeader } from './app-header';
 import { NewChatButton } from './new-chat-button';
@@ -57,6 +58,11 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Delete confirmation modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [threadToDelete, setThreadToDelete] = useState<Thread | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Get the current active route - memoized for performance
   const currentThreadId = useMemo(() => {
@@ -137,6 +143,50 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     loadThreads(true);
   }, [loadThreads]);
 
+  // Handle thread deletion
+  const handleThreadDelete = useCallback(
+    (threadId: string) => {
+      const thread = threads.find(t => t._id === threadId);
+      if (thread) {
+        setThreadToDelete(thread);
+        setShowDeleteModal(true);
+      }
+    },
+    [threads]
+  );
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!threadToDelete || !user?.id) return;
+
+    try {
+      setDeleteLoading(true);
+      await chatAPI.deleteThread(user.id, threadToDelete._id);
+
+      // Remove thread from local state
+      setThreads(prev => prev.filter(t => t._id !== threadToDelete._id));
+
+      // If the deleted thread was currently active, navigate to home
+      if (currentThreadId === threadToDelete._id) {
+        InteractionManager.runAfterInteractions(() => {
+          props.navigation.navigate('index');
+          props.navigation.closeDrawer();
+        });
+      }
+
+      setShowDeleteModal(false);
+      setThreadToDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete thread');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [threadToDelete, user?.id, currentThreadId, props.navigation]);
+
+  const handleDeleteCancel = useCallback(() => {
+    setShowDeleteModal(false);
+    setThreadToDelete(null);
+  }, []);
+
   // Fallback component for error boundary
   const ErrorFallback = useMemo(
     () => (
@@ -173,11 +223,25 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
             error={error}
             currentThreadId={currentThreadId}
             onThreadSelect={handleThreadSelect}
+            onThreadDelete={handleThreadDelete}
             onRetry={handleRetry}
             onRefresh={handleRefresh}
             refreshing={refreshing}
           />
         </View>
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmationModal
+          visible={showDeleteModal}
+          title='Delete Thread'
+          message={`Are you sure you want to delete "${threadToDelete?.title || 'this thread'}"? This action cannot be undone.`}
+          confirmText='Delete'
+          cancelText='Cancel'
+          confirmVariant='destructive'
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+          loading={deleteLoading}
+        />
       </AppContainer>
     </DrawerErrorBoundary>
   );

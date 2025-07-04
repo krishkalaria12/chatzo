@@ -458,3 +458,48 @@ export const trackUsage = mutation({
     });
   },
 });
+
+/**
+ * Delete a thread and all its associated messages
+ * Note: Usage data is preserved for analytics
+ */
+export const deleteThread = mutation({
+  args: {
+    threadId: v.id('threads'),
+    clerkId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { threadId, clerkId } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
+
+    // Verify user has access to this thread
+    const thread = await ctx.db.get(threadId);
+    if (!thread || thread.userId !== user._id) {
+      throw new ConvexError('Thread not found or access denied');
+    }
+
+    // Delete all messages associated with this thread
+    const messages = await ctx.db
+      .query('messages')
+      .withIndex('by_thread_id', (q: any) => q.eq('threadId', threadId))
+      .collect();
+
+    // Delete messages in batches for better performance
+    const deletePromises = messages.map(message => ctx.db.delete(message._id));
+    await Promise.all(deletePromises);
+
+    // Delete the thread itself
+    await ctx.db.delete(threadId);
+
+    // Note: We do NOT delete usage events as they should be preserved for analytics
+    // Usage events remain in the database for historical tracking
+
+    return {
+      success: true,
+      deletedThreadId: threadId,
+      deletedMessagesCount: messages.length,
+    };
+  },
+});

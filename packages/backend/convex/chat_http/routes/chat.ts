@@ -505,3 +505,52 @@ export const getMessages = httpAction(async (ctx, request) => {
     );
   }
 });
+
+/**
+ * DELETE /api/chat/threads/:threadId
+ * Delete a specific conversation thread and all its messages
+ * Note: Usage data is preserved for analytics
+ */
+export const deleteThread = httpAction(async (ctx, request) => {
+  try {
+    const url = new URL(request.url);
+    const clerkId = url.searchParams.get('clerkId');
+    const threadId = url.pathname.split('/')[4];
+
+    // Get internal userId from clerkId
+    if (!clerkId) {
+      return createErrorResponse('clerkId parameter is required', 400);
+    }
+
+    const userId = await getUserIdFromClerkId(ctx, clerkId);
+    if (!userId) {
+      return createErrorResponse('Invalid clerkId or user not found', 401);
+    }
+
+    if (!threadId) {
+      return createErrorResponse('Thread ID is required', 400);
+    }
+
+    const result = await ctx.runMutation(api.services.chat_service.deleteThread, {
+      threadId: threadId as any,
+      clerkId,
+    });
+
+    return createSuccessResponse({
+      message: 'Thread deleted successfully',
+      deletedThreadId: result.deletedThreadId,
+      deletedMessagesCount: result.deletedMessagesCount,
+    });
+  } catch (error) {
+    console.error('Delete thread error:', error);
+
+    if (error instanceof ConvexError && error.message.includes('access denied')) {
+      return createErrorResponse('Thread not found or access denied', 404);
+    }
+
+    return createErrorResponse(
+      error instanceof Error ? error.message : 'Failed to delete thread',
+      500
+    );
+  }
+});

@@ -373,6 +373,34 @@ class ChatAPI {
 
     return data;
   }
+
+  /**
+   * Delete a thread and all its messages
+   */
+  async deleteThread(
+    clerkId: string,
+    threadId: string
+  ): Promise<{
+    message: string;
+    deletedThreadId: string;
+    deletedMessagesCount: number;
+  }> {
+    const params = new URLSearchParams({
+      clerkId,
+    });
+
+    const response = await fetch(`${this.baseUrl}/api/chat/threads/${threadId}?${params}`, {
+      method: 'DELETE',
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to delete thread');
+    }
+
+    return data;
+  }
 }
 
 // Export singleton instance

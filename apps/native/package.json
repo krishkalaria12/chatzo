@@ -30,6 +30,7 @@
     "convex": "^1.25.0",
     "date-fns": "^4.1.0",
     "expo": "^53.0.16",
+    "expo-blur": "~14.1.5",
     "expo-camera": "~16.1.10",
     "expo-clipboard": "~7.1.5",
     "expo-constants": "~17.1.4",

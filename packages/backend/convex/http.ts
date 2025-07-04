@@ -9,6 +9,7 @@ import {
   getThreads,
   getMessages,
   generateTitle,
+  deleteThread,
 } from './chat_http/routes/chat';
 import { getUserUsage, getModelUsage } from './chat_http/routes/analytics';
 
@@ -116,6 +117,13 @@ http.route({
   pathPrefix: '/api/chat/threads/',
   method: 'GET',
   handler: getMessages,
+});
+
+// Handle thread deletion: /api/chat/threads/<threadId>
+http.route({
+  pathPrefix: '/api/chat/threads/',
+  method: 'DELETE',
+  handler: deleteThread,
 });
 
 export default http;
