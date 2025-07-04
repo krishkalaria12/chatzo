@@ -20,7 +20,7 @@ import { getOptimizedImageUrl } from '@/utils/cloudinary';
 import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { MessageList, MessageRenderer } from '@/components/messages';
-import { TypingShimmer } from '@/components/ui/shimmer-text';
+import { AssistantMessageSkeleton } from '@/components/messages/extra';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread, MessageContent } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
@@ -353,11 +353,7 @@ export default function HomePage() {
                   ))}
 
                   {/* Typing indicator */}
-                  {isLoading && (
-                    <View className={cn('items-start mb-4 px-4')}>
-                      <TypingShimmer visible={true} />
-                    </View>
-                  )}
+                  {isLoading && <AssistantMessageSkeleton />}
                 </View>
               )}
             </ScrollView>

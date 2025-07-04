@@ -20,7 +20,7 @@ interface SkeletonProps {
   animated?: boolean;
 }
 
-export const Skeleton: React.FC<SkeletonProps> = ({
+const Skeleton: React.FC<SkeletonProps> = ({
   width = '100%',
   height = 16,
   className,
@@ -70,6 +70,8 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     </View>
   );
 };
+
+export default Skeleton;
 
 // Preset skeleton variants
 export const SkeletonText: React.FC<{ lines?: number; className?: string }> = ({
