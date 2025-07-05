@@ -16,14 +16,13 @@ import { useChat } from '@ai-sdk/react';
 import { fetch as expoFetch } from 'expo/fetch';
 import { AppContainer } from '@/components/app-container';
 import { AutoResizingInput } from '@/components/ui/auto-resizing-input';
-import { getOptimizedImageUrl } from '@/utils/cloudinary';
 import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { MessageList, MessageRenderer } from '@/components/messages';
+import { MessageRenderer } from '@/components/messages';
 import { TypingShimmer } from '@/components/ui/shimmer-text';
 import { AssistantMessageSkeleton, UserMessageSkeleton } from '@/components/messages/extra';
 import { useColorScheme } from '@/lib/use-color-scheme';
-import { chatAPI, Thread, MessageContent } from '@/lib/api/chat-api';
+import { chatAPI, Thread } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
 import { DrawerActions } from '@react-navigation/native';
 import { useNavigation, useLocalSearchParams } from 'expo-router';
@@ -353,59 +352,50 @@ export default function HomePage() {
 
   return (
     <AppContainer>
-      <View className={cn('flex-1 relative')} style={{ flex: 1 }}>
-        {/* Fixed Header - Absolute positioned */}
-        <View
-          className={cn(
-            'absolute top-0 left-0 right-0 z-50 py-4 px-4 border-b border-border bg-background'
-          )}
-        >
-          <View className={cn('flex-row items-center justify-between')}>
-            <View className={cn('flex-row items-center flex-1')}>
-              {/* Menu button to open navigation drawer */}
-              <TouchableOpacity
-                onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
-                className={cn('mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800')}
-              >
-                <MaterialIcons
-                  name='menu'
-                  size={20}
-                  color={isDarkColorScheme ? '#f9fafb' : '#111827'}
-                />
-              </TouchableOpacity>
+      {/* Ensure the entire view shifts properly when keyboard is visible */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <View className={cn('flex-1')}>
+          {/* Header (remains fixed at the top) */}
+          <View className={cn('py-4 px-4 border-b border-border bg-background')}>
+            <View className={cn('flex-row items-center justify-between')}>
+              <View className={cn('flex-row items-center flex-1')}>
+                {/* Menu button to open navigation drawer */}
+                <TouchableOpacity
+                  onPress={() => navigation.dispatch(DrawerActions.toggleDrawer())}
+                  className={cn('mr-3 p-2 rounded-lg bg-gray-100 dark:bg-gray-800')}
+                >
+                  <MaterialIcons
+                    name='menu'
+                    size={20}
+                    color={isDarkColorScheme ? '#f9fafb' : '#111827'}
+                  />
+                </TouchableOpacity>
 
-              <View className={cn('flex-1')}>
-                <Text className={cn('text-xl font-bold text-black dark:text-white')}>
-                  {currentThread?.title || 'New Chat'}
-                </Text>
+                <View className={cn('flex-1')}>
+                  <Text className={cn('text-xl font-bold text-black dark:text-white')}>
+                    {currentThread?.title || 'New Chat'}
+                  </Text>
+                </View>
               </View>
+              <ThemeToggle />
             </View>
-            <ThemeToggle />
           </View>
-        </View>
 
-        {/* Scrollable Content Area */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          className={cn('flex-1')}
-          style={{ flex: 1 }}
-          enabled={true}
-        >
+          {/* Scrollable Content Area */}
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <ScrollView
               ref={scrollViewRef}
               className={cn('flex-1')}
-              style={{
-                flex: 1,
-              }}
+              keyboardShouldPersistTaps='handled'
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{
                 flexGrow: 1,
-                paddingTop: Platform.OS === 'ios' ? 110 : 100, // More space from header
-                paddingBottom: 180, // More space from input area
-                paddingHorizontal: 0,
+                paddingVertical: 12,
               }}
-              keyboardShouldPersistTaps='handled'
             >
               {/* Show Suggested Prompts when no messages */}
               {messages.length === 0 && !isLoadingMessages && !isLoading && (
@@ -464,28 +454,26 @@ export default function HomePage() {
               )}
             </ScrollView>
           </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
 
-        {/* Fixed Input at Bottom - Absolute positioned */}
-        <View
-          className={cn(
-            'absolute bottom-0 left-0 right-0 z-50 bg-background border-t border-border'
-          )}
-          style={{
-            paddingTop: 8,
-            paddingBottom: Platform.OS === 'ios' ? 10 : 5, // Very little spacing from screen
-          }}
-        >
-          <AutoResizingInput
-            onSend={handleSendMessage}
-            placeholder='Type your message...'
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-            isStreaming={isLoading}
-            onStop={stop}
-          />
+          {/* Input (remains fixed at the bottom) */}
+          <View
+            className={cn('bg-background border-t border-border')}
+            style={{
+              paddingTop: 8,
+              paddingBottom: Platform.OS === 'ios' ? 10 : 5,
+            }}
+          >
+            <AutoResizingInput
+              onSend={handleSendMessage}
+              placeholder='Type your message...'
+              selectedModel={selectedModel}
+              onModelChange={setSelectedModel}
+              isStreaming={isLoading}
+              onStop={stop}
+            />
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </AppContainer>
   );
 }
