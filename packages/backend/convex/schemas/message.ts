@@ -67,4 +67,5 @@ export const Message = v.object({
   metadata: MessageMetadata,
   isDeleted: v.optional(v.boolean()),
   editedAt: v.optional(v.number()),
+  edited: v.optional(v.boolean()),
 });

@@ -56,7 +56,7 @@ export default function HomePage() {
   }, [newChat]);
 
   // Use AI SDK's useChat hook with proper configuration
-  const { messages, isLoading, error, append, setMessages } = useChat({
+  const { messages, isLoading, error, append, setMessages, stop } = useChat({
     fetch: expoFetch as unknown as typeof globalThis.fetch,
     api: generateConvexApiUrl('/api/chat/completions'),
     body: {
@@ -243,6 +243,107 @@ export default function HomePage() {
     fetchThread();
   }, [threadParam, user?.id]);
 
+  // Message action handlers
+  const handleCopy = async (messageId: string) => {
+    console.log('Copy message:', messageId);
+    // Copy functionality is handled in the MessageActionButtons component
+  };
+
+  const handleRetry = async (messageId: string, selectedModel?: string) => {
+    if (!user?.id || !currentThread?._id) return;
+
+    try {
+      const messageIndex = messages.findIndex(msg => msg.id === messageId);
+      if (messageIndex === -1) return;
+
+      const message = messages[messageIndex];
+
+      // Delete messages from backend starting from this index
+      await chatAPI.deleteMessagesFromIndex(user.id, currentThread._id, messageIndex);
+
+      // Update local state
+      const newMessages = messages.slice(0, messageIndex);
+      setMessages(newMessages);
+
+      // Update model if specified
+      if (selectedModel) {
+        setSelectedModel(selectedModel);
+      }
+
+      // Resend the message
+      await append({
+        role: 'user',
+        content: message.content,
+      });
+    } catch (error) {
+      console.error('Retry failed:', error);
+      Alert.alert('Retry Failed', 'Unable to retry the message. Please try again.');
+    }
+  };
+
+  const handleEdit = async (messageId: string) => {
+    if (!user?.id || !currentThread?._id) return;
+
+    try {
+      const messageIndex = messages.findIndex(msg => msg.id === messageId);
+      if (messageIndex === -1) return;
+
+      const message = messages[messageIndex];
+
+      // Only allow editing user messages
+      if (message.role === 'user') {
+        // Extract text content from message
+        let textContent = '';
+        if (typeof message.content === 'string') {
+          textContent = message.content;
+        } else if (Array.isArray(message.content)) {
+          textContent = (message.content as any[])
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join(' ');
+        }
+
+        // Show edit dialog
+        Alert.prompt(
+          'Edit Message',
+          'Edit your message and press OK to resend',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Send',
+              onPress: async editedText => {
+                if (editedText && editedText.trim()) {
+                  try {
+                    // Delete messages from backend starting from this index
+                    await chatAPI.deleteMessagesFromIndex(user.id, currentThread._id, messageIndex);
+
+                    // Update local state
+                    const newMessages = messages.slice(0, messageIndex);
+                    setMessages(newMessages);
+
+                    // Resend with edited content
+                    await append({
+                      role: 'user',
+                      content: editedText.trim(),
+                    });
+                  } catch (error) {
+                    console.error('Edit failed:', error);
+                    Alert.alert('Edit Failed', 'Unable to edit the message. Please try again.');
+                  }
+                }
+              },
+            },
+          ],
+          'plain-text',
+          textContent
+        );
+      }
+    } catch (error) {
+      console.error('Edit operation failed:', error);
+      Alert.alert('Edit Failed', 'Unable to edit the message. Please try again.');
+    }
+  };
+
   if (error) {
     return (
       <AppContainer>
@@ -360,6 +461,9 @@ export default function HomePage() {
                         content: message.content,
                         createdAt: message.createdAt,
                       }}
+                      onCopy={handleCopy}
+                      onRetry={handleRetry}
+                      onEdit={handleEdit}
                     />
                   ))}
 
@@ -390,6 +494,8 @@ export default function HomePage() {
             placeholder='Type your message...'
             selectedModel={selectedModel}
             onModelChange={setSelectedModel}
+            isStreaming={isLoading}
+            onStop={stop}
           />
         </View>
       </View>

@@ -434,6 +434,87 @@ class ChatAPI {
 
     return data;
   }
+
+  /**
+   * Update/edit a message
+   */
+  async updateMessage(
+    clerkId: string,
+    messageId: string,
+    content: MessageContent
+  ): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/api/chat/messages/${messageId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        clerkId,
+        content,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to update message');
+    }
+
+    return data;
+  }
+
+  /**
+   * Delete a single message
+   */
+  async deleteMessage(clerkId: string, messageId: string): Promise<{ success: boolean }> {
+    const response = await fetch(`${this.baseUrl}/api/chat/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        clerkId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to delete message');
+    }
+
+    return data;
+  }
+
+  /**
+   * Delete messages from a specific index onwards (for retry operations)
+   */
+  async deleteMessagesFromIndex(
+    clerkId: string,
+    threadId: string,
+    fromIndex: number
+  ): Promise<{ success: boolean; deletedCount: number }> {
+    const response = await fetch(
+      `${this.baseUrl}/api/chat/bulk-delete-messages/${threadId}/from/${fromIndex}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          clerkId,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to delete messages');
+    }
+
+    return data;
+  }
 }
 
 // Export singleton instance

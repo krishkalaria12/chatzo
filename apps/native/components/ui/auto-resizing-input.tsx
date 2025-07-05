@@ -16,7 +16,7 @@ import Animated, {
   withSpring,
   interpolate,
 } from 'react-native-reanimated';
-import { Camera, Image as ImageIcon } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { ModelPicker } from './model-picker';
@@ -45,6 +45,8 @@ interface AutoResizingInputProps {
   uploadPreset?: string;
   maxImages?: number;
   disabled?: boolean;
+  isStreaming?: boolean;
+  onStop?: () => void;
 }
 
 export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
@@ -55,6 +57,8 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   uploadPreset = 'chatzo',
   maxImages = 5,
   disabled = false,
+  isStreaming = false,
+  onStop,
 }) => {
   const [text, setText] = useState('');
   const [inputHeight, setInputHeight] = useState(40);
@@ -580,31 +584,51 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
                 )}
               </View>
 
-              {/* Send button */}
-              <TouchableOpacity
-                onPress={handleSend}
-                disabled={disabled || (!text.trim() && images.length === 0)}
-                className='rounded-full px-4 py-2'
-                style={{
-                  backgroundColor:
-                    !disabled && (text.trim() || images.length > 0)
-                      ? colors.sendButton.active
-                      : colors.sendButton.inactive,
-                  opacity: disabled || (!text.trim() && images.length === 0) ? 0.5 : 1,
-                }}
-              >
-                <Text
-                  className='font-medium'
+              {/* Send/Stop button */}
+              {isStreaming ? (
+                <TouchableOpacity
+                  onPress={onStop}
+                  className='rounded-full px-4 py-2 flex-row items-center'
                   style={{
-                    color:
-                      !disabled && (text.trim() || images.length > 0)
-                        ? colors.sendText.active
-                        : colors.sendText.inactive,
+                    backgroundColor: '#dc2626', // Red color for stop
                   }}
                 >
-                  Send
-                </Text>
-              </TouchableOpacity>
+                  <X size={16} color='white' />
+                  <Text
+                    className='font-medium ml-1'
+                    style={{
+                      color: 'white',
+                    }}
+                  >
+                    Stop
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={handleSend}
+                  disabled={disabled || (!text.trim() && images.length === 0)}
+                  className='rounded-full px-4 py-2'
+                  style={{
+                    backgroundColor:
+                      !disabled && (text.trim() || images.length > 0)
+                        ? colors.sendButton.active
+                        : colors.sendButton.inactive,
+                    opacity: disabled || (!text.trim() && images.length === 0) ? 0.5 : 1,
+                  }}
+                >
+                  <Text
+                    className='font-medium'
+                    style={{
+                      color:
+                        !disabled && (text.trim() || images.length > 0)
+                          ? colors.sendText.active
+                          : colors.sendText.inactive,
+                    }}
+                  >
+                    Send
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </Animated.View>

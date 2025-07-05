@@ -11,7 +11,12 @@ import {
   getThreads,
   updateThread,
 } from './chat_http/routes/threads';
-import { getMessages } from './chat_http/routes/messages';
+import {
+  getMessages,
+  updateMessage,
+  deleteMessage,
+  deleteMessagesFromIndex,
+} from './chat_http/routes/messages';
 import { getUserUsage, getModelUsage } from './api/routes/analytics';
 
 const http = httpRouter();
@@ -120,6 +125,13 @@ http.route({
   handler: getMessages,
 });
 
+// Handle thread updates: /api/chat/threads/<threadId>
+http.route({
+  pathPrefix: '/api/chat/threads/',
+  method: 'PUT',
+  handler: updateThread,
+});
+
 // Handle thread deletion: /api/chat/threads/<threadId>
 http.route({
   pathPrefix: '/api/chat/threads/',
@@ -127,11 +139,25 @@ http.route({
   handler: deleteThread,
 });
 
-// Handle thread updates: /api/chat/threads/<threadId>
+// Handle bulk message deletion: /api/chat/bulk-delete-messages/<threadId>/from/<index>
 http.route({
-  pathPrefix: '/api/chat/threads/',
+  pathPrefix: '/api/chat/bulk-delete-messages/',
+  method: 'DELETE',
+  handler: deleteMessagesFromIndex,
+});
+
+// Handle message updates: /api/chat/messages/<messageId>
+http.route({
+  pathPrefix: '/api/chat/messages/',
   method: 'PUT',
-  handler: updateThread,
+  handler: updateMessage,
+});
+
+// Handle message deletion: /api/chat/messages/<messageId>
+http.route({
+  pathPrefix: '/api/chat/messages/',
+  method: 'DELETE',
+  handler: deleteMessage,
 });
 
 export default http;
