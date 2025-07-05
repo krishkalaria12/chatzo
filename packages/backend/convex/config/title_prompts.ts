@@ -15,7 +15,6 @@ Examples of good titles:
 - "Python Data Analysis"
 - "React Component Help"
 - "Travel Planning Italy"
-- "Budget Formula Question"
 - "Career Change Advice"
 - "Database Schema Design"
 - "API Development Guide"

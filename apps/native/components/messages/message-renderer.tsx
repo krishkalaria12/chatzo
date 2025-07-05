@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
-import { View, Text, TouchableOpacity, Dimensions, Alert } from 'react-native';
+import React, { memo, useState } from 'react';
+import { View, Text, TouchableOpacity, Dimensions, Alert, TextInput } from 'react-native';
+import { Check, X } from 'lucide-react-native';
 import { MarkdownContent } from './markdown-content';
 import { EnhancedImage } from '@/components/images';
 import { useColorScheme } from '@/lib/use-color-scheme';
@@ -19,18 +20,64 @@ interface MessageRendererProps {
   message: Message;
   onCopy?: (messageId: string) => void;
   onRetry?: (messageId: string, selectedModel?: string) => void;
-  onEdit?: (messageId: string) => void;
+  onEdit?: (messageId: string, editedText?: string) => void;
+  isStreaming?: boolean;
+  isLastMessage?: boolean;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
 
 export const MessageRenderer: React.FC<MessageRendererProps> = memo(
-  ({ message, onCopy, onRetry, onEdit }) => {
+  ({ message, onCopy, onRetry, onEdit, isStreaming = false, isLastMessage = false }) => {
     const { isDarkColorScheme } = useColorScheme();
     const theme = isDarkColorScheme ? CHATZO_COLORS.dark : CHATZO_COLORS.light;
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState('');
+
     const isUser = message.role === 'user';
     const isAssistant = message.role === 'assistant';
+
+    // Extract text content from message for editing
+    const getTextContent = (content: any): string => {
+      if (typeof content === 'string') {
+        return content;
+      }
+
+      if (Array.isArray(content)) {
+        return content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join(' ');
+      }
+
+      if (content && typeof content === 'object' && content.type === 'text') {
+        return content.text;
+      }
+
+      return '';
+    };
+
+    // Handle edit start
+    const handleEditStart = () => {
+      const textContent = getTextContent(message.content);
+      setEditText(textContent);
+      setIsEditing(true);
+    };
+
+    // Handle edit save
+    const handleEditSave = () => {
+      if (editText.trim()) {
+        onEdit?.(message.id, editText.trim());
+        setIsEditing(false);
+      }
+    };
+
+    // Handle edit cancel
+    const handleEditCancel = () => {
+      setIsEditing(false);
+      setEditText('');
+    };
 
     // Enhanced image content renderer using the EnhancedImage component
     const renderImageContent = (content: { type: 'image'; url: string; alt?: string }) => {
@@ -232,53 +279,118 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
                 elevation: 2,
               }}
             >
-              {textParts.map((part, index) => (
-                <Text
-                  key={`txt-${index}`}
-                  className='font-nunito'
-                  style={{
-                    color: isDarkColorScheme
-                      ? CHATZO_COLORS.dark.background
-                      : CHATZO_COLORS.light.background,
-                    fontSize: 15,
-                    lineHeight: 21,
-                    fontWeight: '500',
-                  }}
-                >
-                  {part.text}
-                </Text>
-              ))}
+              {isEditing ? (
+                // Edit mode - TextInput
+                <View>
+                  <TextInput
+                    value={editText}
+                    onChangeText={setEditText}
+                    multiline
+                    autoFocus
+                    style={{
+                      color: isDarkColorScheme
+                        ? CHATZO_COLORS.dark.background
+                        : CHATZO_COLORS.light.background,
+                      fontSize: 15,
+                      lineHeight: 21,
+                      fontWeight: '500',
+                      padding: 0,
+                      margin: 0,
+                      minHeight: 20,
+                    }}
+                    placeholder='Edit your message...'
+                    placeholderTextColor={isDarkColorScheme ? '#9ca3af' : '#64748b'}
+                  />
+
+                  {/* Edit buttons */}
+                  <View className='flex-row items-center justify-end mt-2 gap-2'>
+                    <TouchableOpacity
+                      onPress={handleEditCancel}
+                      className='p-1 rounded-full'
+                      style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
+                    >
+                      <X
+                        size={16}
+                        color={
+                          isDarkColorScheme
+                            ? CHATZO_COLORS.dark.background
+                            : CHATZO_COLORS.light.background
+                        }
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleEditSave}
+                      className='p-1 rounded-full'
+                      style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
+                    >
+                      <Check
+                        size={16}
+                        color={
+                          isDarkColorScheme
+                            ? CHATZO_COLORS.dark.background
+                            : CHATZO_COLORS.light.background
+                        }
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                // View mode - Normal text
+                textParts.map((part, index) => (
+                  <Text
+                    key={`txt-${index}`}
+                    className='font-nunito'
+                    style={{
+                      color: isDarkColorScheme
+                        ? CHATZO_COLORS.dark.background
+                        : CHATZO_COLORS.light.background,
+                      fontSize: 15,
+                      lineHeight: 21,
+                      fontWeight: '500',
+                    }}
+                  >
+                    {part.text}
+                  </Text>
+                ))
+              )}
             </View>
           )}
 
           {/* Action buttons for user messages */}
-          <MessageActionButtons
-            messageId={message.id}
-            role={message.role}
-            content={message.content}
-            onCopy={() => onCopy?.(message.id)}
-            onRetry={(messageId, selectedModel) => onRetry?.(messageId, selectedModel)}
-            onEdit={() => onEdit?.(message.id)}
-          />
+          {!isEditing && (
+            <MessageActionButtons
+              messageId={message.id}
+              role={message.role}
+              content={message.content}
+              onCopy={() => onCopy?.(message.id)}
+              onRetry={(messageId, selectedModel) => onRetry?.(messageId, selectedModel)}
+              onEdit={handleEditStart}
+            />
+          )}
         </View>
       );
     }
 
     // Assistant message styling - no background, full width
     if (isAssistant) {
+      // Show action buttons only when not streaming or not the last message
+      const showActionButtons = !isStreaming || !isLastMessage;
+
       return (
         <View className={cn('mb-4 px-4')}>
           <View className={cn('w-full')}>{renderContent(message.content)}</View>
 
-          {/* Action buttons for assistant messages */}
-          <MessageActionButtons
-            messageId={message.id}
-            role={message.role}
-            content={message.content}
-            onCopy={() => onCopy?.(message.id)}
-            onRetry={(messageId, selectedModel) => onRetry?.(messageId, selectedModel)}
-            onEdit={() => onEdit?.(message.id)}
-          />
+          {/* Action buttons for assistant messages - only show when response is complete */}
+          {showActionButtons && (
+            <MessageActionButtons
+              messageId={message.id}
+              role={message.role}
+              content={message.content}
+              onCopy={() => onCopy?.(message.id)}
+              onRetry={(messageId, selectedModel) => onRetry?.(messageId, selectedModel)}
+              onEdit={() => onEdit?.(message.id)}
+            />
+          )}
         </View>
       );
     }

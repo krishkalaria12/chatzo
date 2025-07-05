@@ -124,7 +124,7 @@ export const updateMessage = httpAction(async (ctx, request) => {
 });
 
 /**
- * DELETE /api/chat/threads/:threadId/messages/from/:index
+ * DELETE /api/chat/bulk-delete-messages/:threadId/from/:index
  * Delete messages from a specific index onwards (for retry operations)
  */
 export const deleteMessagesFromIndex = httpAction(async (ctx, request) => {
@@ -135,7 +135,7 @@ export const deleteMessagesFromIndex = httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const pathParts = url.pathname.split('/');
     const threadId = pathParts[4];
-    const fromIndex = parseInt(pathParts[7]);
+    const fromIndex = parseInt(pathParts[6]); // Changed from 7 to 6
 
     if (!clerkId) {
       return createErrorResponse('clerkId is required', 400);

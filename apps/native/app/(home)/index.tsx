@@ -67,6 +67,16 @@ export default function HomePage() {
     },
     onError: error => {
       console.error('Chat error:', error);
+
+      // Don't show error for cancelled requests (when user clicks stop)
+      if (
+        error.message?.includes('Cancelled request') ||
+        error.message?.includes('aborted') ||
+        error.message?.includes('cancelled')
+      ) {
+        return; // Silently ignore cancelled requests
+      }
+
       Alert.alert('Chat Error', error.message || 'Unknown error occurred');
     },
     onFinish: () => {
@@ -281,8 +291,11 @@ export default function HomePage() {
     }
   };
 
-  const handleEdit = async (messageId: string) => {
+  const handleEdit = async (messageId: string, editedText?: string) => {
     if (!user?.id || !currentThread?._id) return;
+
+    // If no edited text provided, this is just triggering edit mode (handled in component)
+    if (!editedText) return;
 
     try {
       const messageIndex = messages.findIndex(msg => msg.id === messageId);
@@ -291,52 +304,24 @@ export default function HomePage() {
       const message = messages[messageIndex];
 
       // Only allow editing user messages
-      if (message.role === 'user') {
-        // Extract text content from message
-        let textContent = '';
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (Array.isArray(message.content)) {
-          textContent = (message.content as any[])
-            .filter((part: any) => part.type === 'text')
-            .map((part: any) => part.text)
-            .join(' ');
+      if (message.role === 'user' && editedText.trim()) {
+        try {
+          // Delete messages from backend starting from this index
+          await chatAPI.deleteMessagesFromIndex(user.id, currentThread._id, messageIndex);
+
+          // Update local state
+          const newMessages = messages.slice(0, messageIndex);
+          setMessages(newMessages);
+
+          // Resend with edited content
+          await append({
+            role: 'user',
+            content: editedText.trim(),
+          });
+        } catch (error) {
+          console.error('Edit failed:', error);
+          Alert.alert('Edit Failed', 'Unable to edit the message. Please try again.');
         }
-
-        // Show edit dialog
-        Alert.prompt(
-          'Edit Message',
-          'Edit your message and press OK to resend',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Send',
-              onPress: async editedText => {
-                if (editedText && editedText.trim()) {
-                  try {
-                    // Delete messages from backend starting from this index
-                    await chatAPI.deleteMessagesFromIndex(user.id, currentThread._id, messageIndex);
-
-                    // Update local state
-                    const newMessages = messages.slice(0, messageIndex);
-                    setMessages(newMessages);
-
-                    // Resend with edited content
-                    await append({
-                      role: 'user',
-                      content: editedText.trim(),
-                    });
-                  } catch (error) {
-                    console.error('Edit failed:', error);
-                    Alert.alert('Edit Failed', 'Unable to edit the message. Please try again.');
-                  }
-                }
-              },
-            },
-          ],
-          'plain-text',
-          textContent
-        );
       }
     } catch (error) {
       console.error('Edit operation failed:', error);
@@ -464,6 +449,8 @@ export default function HomePage() {
                       onCopy={handleCopy}
                       onRetry={handleRetry}
                       onEdit={handleEdit}
+                      isStreaming={isLoading}
+                      isLastMessage={index === messages.length - 1}
                     />
                   ))}
 

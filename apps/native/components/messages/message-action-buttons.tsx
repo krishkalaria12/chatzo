@@ -13,7 +13,7 @@ interface MessageActionButtonsProps {
   isVisible?: boolean;
   onCopy?: () => void;
   onRetry?: (messageId: string, selectedModel?: string) => void;
-  onEdit?: (messageId: string) => void;
+  onEdit?: () => void;
   onCancel?: () => void;
 }
 
@@ -92,7 +92,7 @@ export const MessageActionButtons: React.FC<MessageActionButtonsProps> = ({
 
   const handleEdit = () => {
     if (role === 'user') {
-      onEdit?.(messageId);
+      onEdit?.();
     }
   };
 
