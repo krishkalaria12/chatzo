@@ -156,6 +156,79 @@ export function validateModelForImages(
 }
 
 /**
+ * Validate if model can handle PDFs
+ */
+export function validateModelForPDFs(
+  model: DisplayModel | null,
+  hasPDFs: boolean
+): {
+  canProceed: boolean;
+  warning?: string;
+  suggestion?: string;
+} {
+  if (!hasPDFs) {
+    return { canProceed: true };
+  }
+
+  if (!model) {
+    return {
+      canProceed: false,
+      warning: 'Model not found',
+      suggestion: 'Please select a valid model',
+    };
+  }
+
+  if (!model.supportsVision) {
+    return {
+      canProceed: false,
+      warning: `${model.name} doesn't support PDF documents`,
+      suggestion: 'Switch to a vision-capable model like GPT-4V or Gemini Pro Vision',
+    };
+  }
+
+  return { canProceed: true };
+}
+
+/**
+ * Validate if model can handle mixed attachments (images + PDFs)
+ */
+export function validateModelForAttachments(
+  model: DisplayModel | null,
+  hasImages: boolean,
+  hasPDFs: boolean
+): {
+  canProceed: boolean;
+  warning?: string;
+  suggestion?: string;
+} {
+  if (!hasImages && !hasPDFs) {
+    return { canProceed: true };
+  }
+
+  if (!model) {
+    return {
+      canProceed: false,
+      warning: 'Model not found',
+      suggestion: 'Please select a valid model',
+    };
+  }
+
+  if (!model.supportsVision) {
+    const attachmentTypes = [];
+    if (hasImages) attachmentTypes.push('images');
+    if (hasPDFs) attachmentTypes.push('PDF documents');
+
+    return {
+      canProceed: false,
+      warning: `${model.name} doesn't support ${attachmentTypes.join(' or ')}`,
+      suggestion: 'Switch to a vision-capable model like GPT-4V or Gemini Pro Vision',
+    };
+  }
+
+  return { canProceed: true };
+}
+
+/**
  * Get recommended model for images
  */
 export async function getRecommendedModelForImages(): Promise<DisplayModel | null> {

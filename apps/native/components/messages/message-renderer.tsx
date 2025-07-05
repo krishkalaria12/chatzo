@@ -3,10 +3,17 @@ import { View, Text, TouchableOpacity, Dimensions, Alert, TextInput } from 'reac
 import { Check, X } from 'lucide-react-native';
 import { MarkdownContent } from './markdown-content';
 import { EnhancedImage } from '@/components/images';
+import { PDFRenderer } from '@/components/documents';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
-import { MessageContent, ContentPart, ImageContentPart, TextContentPart } from '@/lib/api/chat-api';
+import {
+  MessageContent,
+  ContentPart,
+  ImageContentPart,
+  TextContentPart,
+  FileContentPart,
+} from '@/lib/api/chat-api';
 import { MessageActionButtons } from './message-action-buttons';
 
 interface Message {
@@ -103,7 +110,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
       );
     };
 
-    // File content renderer (for future file support)
+    // File content renderer with PDF support
     const renderFileContent = (content: {
       type: 'file';
       url: string;
@@ -111,6 +118,12 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
       fileSize?: number;
       mimeType?: string;
     }) => {
+      // If it's a PDF, use the specialized PDF renderer
+      if (content.mimeType === 'application/pdf') {
+        return renderPDFContent(content);
+      }
+
+      // Generic file renderer for other file types
       const formatFileSize = (bytes?: number): string => {
         if (!bytes) return '';
         const sizes = ['B', 'KB', 'MB', 'GB'];
@@ -159,6 +172,37 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
             )}
           </View>
         </TouchableOpacity>
+      );
+    };
+
+    // PDF content renderer using the specialized PDF renderer
+    const renderPDFContent = (content: {
+      type: 'file';
+      url: string;
+      fileName: string;
+      fileSize?: number;
+      mimeType?: string;
+    }) => {
+      const maxWidth = screenWidth * (isUser ? 0.7 : 0.8);
+      const maxHeight = 200;
+
+      return (
+        <View style={{ marginTop: 8, marginBottom: 4 }}>
+          <PDFRenderer
+            url={content.url}
+            fileName={content.fileName}
+            fileSize={content.fileSize}
+            mimeType={content.mimeType}
+            maxWidth={maxWidth}
+            maxHeight={maxHeight}
+            showDownload={true}
+            showPreview={true}
+            onPress={() => {
+              // Future: Add full-screen PDF preview
+              Alert.alert('PDF Preview', 'Full PDF preview coming soon!');
+            }}
+          />
+        </View>
       );
     };
 
@@ -245,6 +289,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
       const imageParts = (
         Array.isArray(content) ? content.filter(part => part.type === 'image') : []
       ) as ImageContentPart[];
+      const pdfParts = (
+        Array.isArray(content)
+          ? content.filter(part => part.type === 'file' && part.mimeType === 'application/pdf')
+          : []
+      ) as FileContentPart[];
       const textParts = (
         typeof content === 'string'
           ? [{ type: 'text' as const, text: content }]
@@ -262,6 +311,15 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
             <View className='flex-row flex-wrap justify-end gap-2 mb-2'>
               {imageParts.map((part, index) => (
                 <View key={`img-${index}`}>{renderImageContent(part)}</View>
+              ))}
+            </View>
+          )}
+
+          {/* Render PDFs above the text bubble */}
+          {pdfParts.length > 0 && (
+            <View className='flex-row flex-wrap justify-end gap-2 mb-2'>
+              {pdfParts.map((part, index) => (
+                <View key={`pdf-${index}`}>{renderPDFContent(part)}</View>
               ))}
             </View>
           )}

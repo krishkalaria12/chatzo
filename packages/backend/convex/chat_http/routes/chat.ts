@@ -76,6 +76,32 @@ export const completions = httpAction(async (ctx, request) => {
                 text: '[Unsupported image format - only HTTPS URLs or base64 are supported]',
               };
             }
+            if (part.type === 'file' && part.mimeType === 'application/pdf') {
+              const fileUrl = String(part.url);
+
+              // Handle HTTPS URLs (Cloudinary, etc.)
+              if (fileUrl.startsWith('https://')) {
+                return {
+                  type: 'file' as const,
+                  data: new URL(fileUrl),
+                  mimeType: 'application/pdf',
+                };
+              }
+
+              // Reject local file URIs
+              if (fileUrl.startsWith('file://') || fileUrl.startsWith('content://')) {
+                return {
+                  type: 'text' as const,
+                  text: '[PDF was not uploaded to cloud storage and cannot be processed]',
+                };
+              }
+
+              // Reject other unsupported formats
+              return {
+                type: 'text' as const,
+                text: '[Unsupported PDF format - only HTTPS URLs are supported]',
+              };
+            }
             return { type: 'text' as const, text: String(part) };
           }),
         };
@@ -149,8 +175,31 @@ export const completions = httpAction(async (ctx, request) => {
 
     // Start title generation in parallel for new threads (don't await)
     if (isNewThread && messages.length >= 1 && generate_title) {
-      // Pass the full message objects (including images) to title generation
-      const titleMessages = aiMessages;
+      // Convert messages to Convex-compatible format for title generation
+      const titleMessages = aiMessages.map((msg: any) => {
+        return {
+          role: msg.role,
+          content: Array.isArray(msg.content)
+            ? msg.content.map((part: any) => {
+                if (part.type === 'text') {
+                  return { type: 'text' as const, text: part.text };
+                }
+                if (part.type === 'image') {
+                  return { type: 'image' as const, image: part.image };
+                }
+                if (part.type === 'file' && part.data) {
+                  // Convert URL object back to string for Convex compatibility
+                  return {
+                    type: 'file' as const,
+                    data: part.data.toString(),
+                    mimeType: part.mimeType,
+                  };
+                }
+                return part;
+              })
+            : msg.content,
+        };
+      });
 
       if (titleMessages.length > 0) {
         // Fire and forget - runs in parallel with streaming
@@ -203,6 +252,10 @@ export const completions = httpAction(async (ctx, request) => {
                     // Normalize image part to match schema (url property)
                     if (part.type === 'image' && part.image && !part.url) {
                       return { ...part, url: part.image };
+                    }
+                    // Normalize file part to match schema (url property)
+                    if (part.type === 'file' && part.data && !part.url) {
+                      return { ...part, url: part.data.toString() };
                     }
                     return part;
                   });

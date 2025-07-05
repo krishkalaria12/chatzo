@@ -16,29 +16,24 @@ import Animated, {
   withSpring,
   interpolate,
 } from 'react-native-reanimated';
-import { Camera, Image as ImageIcon, X } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, X, FileText } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { ModelPicker } from './model-picker';
 import { SelectedImage, ImagePreview } from '../images';
-import { cn } from '@/lib/utils';
-import { uploadToCloudinary, deleteFromCloudinary } from '@/utils/cloudinary';
-import { useModelsStore, validateModelForImages, DisplayModel } from '@/store/models-store';
-import { isImageFormatSupported } from '@/utils/cloudinary';
-
-interface ImageAttachment {
-  id: string;
-  uri: string;
-  cloudinaryPublicId?: string;
-  name: string;
-  size?: number;
-  isUploading?: boolean;
-  uploadProgress?: number;
-  error?: string;
-}
+import { PDFPickerItem } from '../documents';
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+  uploadPDFToCloudinary,
+} from '@/utils/cloudinary';
+import { validateModelForAttachments } from '@/store/models-store';
+import { isImageFormatSupported, isPDFFile } from '@/utils/cloudinary';
+import { ImageAttachment, PDFAttachment } from '@/lib/types/attachments';
 
 interface AutoResizingInputProps {
-  onSend?: (text: string, images?: ImageAttachment[]) => void;
+  onSend?: (text: string, images?: ImageAttachment[], pdfs?: PDFAttachment[]) => void;
   placeholder?: string;
   selectedModel?: string;
   onModelChange?: (modelKey: string) => void;
@@ -63,7 +58,9 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   const [text, setText] = useState('');
   const [inputHeight, setInputHeight] = useState(40);
   const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [pdfs, setPdfs] = useState<PDFAttachment[]>([]);
   const [isPickingImages, setIsPickingImages] = useState(false);
+  const [isPickingPDF, setIsPickingPDF] = useState(false);
   const [modelWarning, setModelWarning] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const { isDarkColorScheme } = useColorScheme();
@@ -89,11 +86,15 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   // Animation for send button press
   const animationProgress = useSharedValue(0);
 
-  // Check model validation when images or model changes
+  // Check model validation when attachments or model changes
   React.useEffect(() => {
-    const validation = validateModelForImages(selectedModel, images.length > 0);
+    const validation = validateModelForAttachments(
+      selectedModel,
+      images.length > 0,
+      pdfs.length > 0
+    );
     setModelWarning(validation.canProceed ? null : validation.warning || null);
-  }, [selectedModel, images.length]);
+  }, [selectedModel, images.length, pdfs.length]);
 
   // Request camera permissions
   const requestCameraPermissions = async (): Promise<boolean> => {
@@ -168,25 +169,35 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   };
 
   const handleSend = () => {
-    // Check if we can proceed with current model and images
-    const validation = validateModelForImages(selectedModel, images.length > 0);
+    // Check if we can proceed with current model and attachments
+    const validation = validateModelForAttachments(
+      selectedModel,
+      images.length > 0,
+      pdfs.length > 0
+    );
 
     if (!validation.canProceed) {
       Alert.alert(
         'Model Incompatible',
-        validation.warning || 'Selected model cannot handle images',
+        validation.warning || 'Selected model cannot handle attachments',
         [{ text: 'OK', style: 'default' }]
       );
       return;
     }
 
-    if (text.trim() || images.length > 0) {
-      // Filter out images that are still uploading or have errors
+    if (text.trim() || images.length > 0 || pdfs.length > 0) {
+      // Filter out attachments that are still uploading or have errors
       const validImages = images.filter(img => !img.isUploading && !img.error);
+      const validPDFs = pdfs.filter(pdf => !pdf.isUploading && !pdf.error);
 
-      onSend?.(text.trim(), validImages.length > 0 ? validImages : undefined);
+      onSend?.(
+        text.trim(),
+        validImages.length > 0 ? validImages : undefined,
+        validPDFs.length > 0 ? validPDFs : undefined
+      );
       setText('');
       setImages([]);
+      setPdfs([]);
       setInputHeight(40);
       setModelWarning(null);
 
@@ -206,9 +217,35 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   const handleImagesSelected = async (selectedImages: SelectedImage[]) => {
     if (disabled) return;
 
+    // Implement mutual exclusivity - clear PDFs when images are selected
+    if (pdfs.length > 0) {
+      Alert.alert(
+        'Replace PDF?',
+        'Adding images will remove the selected PDF document. Only one type of attachment can be used at a time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setPdfs([]);
+              processImageSelection(selectedImages);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    processImageSelection(selectedImages);
+  };
+
+  // Process image selection (extracted for reuse)
+  const processImageSelection = async (selectedImages: SelectedImage[]) => {
     // Convert to ImageAttachment and start upload
     const newImages: ImageAttachment[] = selectedImages.map(img => ({
       id: `${Date.now()}-${Math.random().toString(36).substring(2)}`,
+      type: 'image' as const,
       uri: img.uri,
       name: img.name,
       size: img.size,
@@ -295,6 +332,202 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
     }
   };
 
+  // Handle PDF selection
+  const handlePDFSelected = async (selectedPDF: PDFAttachment) => {
+    if (disabled) return;
+
+    // Implement mutual exclusivity - clear images when PDF is selected
+    if (images.length > 0) {
+      Alert.alert(
+        'Replace Attachments?',
+        'Adding a PDF will remove any selected images. Only one type of attachment can be used at a time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setImages([]);
+              uploadPDF(selectedPDF);
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    uploadPDF(selectedPDF);
+  };
+
+  // Upload PDF to Cloudinary
+  const uploadPDF = async (pdfAttachment: PDFAttachment) => {
+    // Update state to show uploading
+    setPdfs([{ ...pdfAttachment, isUploading: true, uploadProgress: 0 }]);
+
+    try {
+      // Update progress
+      setPdfs(prevPdfs =>
+        prevPdfs.map(pdf => (pdf.id === pdfAttachment.id ? { ...pdf, uploadProgress: 10 } : pdf))
+      );
+
+      const result = await uploadPDFToCloudinary(pdfAttachment.uri, pdfAttachment.name, {
+        upload_preset: uploadPreset,
+        folder: 'chatzo_documents',
+        tags: ['chat', 'pdf_upload'],
+      });
+
+      // Update with successful upload
+      setPdfs(prevPdfs =>
+        prevPdfs.map(pdf =>
+          pdf.id === pdfAttachment.id
+            ? {
+                ...pdf,
+                uri: result.secure_url, // Use the full Cloudinary URL from response
+                cloudinaryPublicId: result.public_id,
+                isUploading: false,
+                uploadProgress: 100,
+                error: undefined,
+              }
+            : pdf
+        )
+      );
+    } catch (error) {
+      console.error('PDF upload failed:', error);
+
+      // Update with error
+      setPdfs(prevPdfs =>
+        prevPdfs.map(pdf =>
+          pdf.id === pdfAttachment.id
+            ? {
+                ...pdf,
+                isUploading: false,
+                error: error instanceof Error ? error.message : 'Upload failed',
+              }
+            : pdf
+        )
+      );
+    }
+  };
+
+  // Handle PDF deletion
+  const handleDeletePDF = async () => {
+    const pdfToDelete = pdfs[0]; // Only one PDF allowed
+
+    // Remove from UI immediately
+    setPdfs([]);
+
+    // Delete from Cloudinary if it was uploaded
+    if (pdfToDelete?.cloudinaryPublicId) {
+      try {
+        await deleteFromCloudinary(pdfToDelete.cloudinaryPublicId);
+      } catch (error) {
+        console.warn('Failed to delete PDF from Cloudinary:', error);
+      }
+    }
+  };
+
+  // Generate unique ID for PDF
+  const generatePDFId = (): string => {
+    return `pdf_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  };
+
+  // Process selected PDF document
+  const processSelectedPDF = (
+    result: DocumentPicker.DocumentPickerResult
+  ): PDFAttachment | null => {
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return null;
+    }
+
+    const asset = result.assets[0];
+
+    // Validate PDF file
+    if (!isPDFFile(asset.name) || asset.mimeType !== 'application/pdf') {
+      Alert.alert(
+        'Invalid File Type',
+        'Please select a PDF file. Only PDF documents are supported for document chat.',
+        [{ text: 'OK' }]
+      );
+      return null;
+    }
+
+    // Create PDF attachment
+    const pdfAttachment: PDFAttachment = {
+      id: generatePDFId(),
+      type: 'pdf',
+      name: asset.name,
+      uri: asset.uri,
+      size: asset.size || undefined,
+      mimeType: 'application/pdf',
+      title: asset.name.replace(/\.[^/.]+$/, ''), // Remove .pdf extension
+      isUploading: false,
+      uploadProgress: 0,
+    };
+
+    return pdfAttachment;
+  };
+
+  // Pick PDF document directly
+  const pickPDFDocument = async () => {
+    try {
+      setIsPickingPDF(true);
+
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      const pdfAttachment = processSelectedPDF(result);
+      if (pdfAttachment) {
+        await handlePDFSelected(pdfAttachment);
+      }
+    } catch (error) {
+      console.error('PDF picker error:', error);
+      Alert.alert('Document Picker Error', 'Failed to pick PDF document. Please try again.', [
+        { text: 'OK' },
+      ]);
+    } finally {
+      setIsPickingPDF(false);
+    }
+  };
+
+  // Handle PDF picker button press - directly pick PDF
+  const handlePDFPickerPress = async () => {
+    if (disabled || isPickingPDF) return;
+
+    // Check if we already have a PDF
+    if (pdfs.length > 0) {
+      Alert.alert(
+        'PDF Already Selected',
+        'Only one PDF document can be attached at a time. Remove the current PDF to select a new one.'
+      );
+      return;
+    }
+
+    // Implement mutual exclusivity - warn about clearing images
+    if (images.length > 0) {
+      Alert.alert(
+        'Replace Images?',
+        'Selecting a PDF will remove any selected images. Only one type of attachment can be used at a time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setImages([]);
+              pickPDFDocument();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    pickPDFDocument();
+  };
+
   // Direct camera access
   const handleCameraPress = async () => {
     if (disabled || isPickingImages) return;
@@ -304,6 +537,31 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       return;
     }
 
+    // Check for PDF mutual exclusivity
+    if (pdfs.length > 0) {
+      Alert.alert(
+        'Replace PDF?',
+        'Taking a photo will remove the selected PDF document. Only one type of attachment can be used at a time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setPdfs([]);
+              proceedWithCamera();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    proceedWithCamera();
+  };
+
+  // Camera capture logic (extracted for reuse)
+  const proceedWithCamera = async () => {
     try {
       setIsPickingImages(true);
 
@@ -322,7 +580,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const processedImages = processSelectedImages(result.assets);
         if (processedImages.length > 0) {
-          await handleImagesSelected(processedImages);
+          await processImageSelection(processedImages);
         }
       }
     } catch (error) {
@@ -342,6 +600,31 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       return;
     }
 
+    // Check for PDF mutual exclusivity
+    if (pdfs.length > 0) {
+      Alert.alert(
+        'Replace PDF?',
+        'Selecting images will remove the selected PDF document. Only one type of attachment can be used at a time.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Continue',
+            style: 'destructive',
+            onPress: () => {
+              setPdfs([]);
+              proceedWithGallery();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    proceedWithGallery();
+  };
+
+  // Gallery selection logic (extracted for reuse)
+  const proceedWithGallery = async () => {
     try {
       setIsPickingImages(true);
 
@@ -364,7 +647,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const processedImages = processSelectedImages(result.assets);
         if (processedImages.length > 0) {
-          await handleImagesSelected(processedImages);
+          await processImageSelection(processedImages);
         }
       }
     } catch (error) {
@@ -401,9 +684,11 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   // Calculate container height with proper spacing
   const modelSectionHeight = 50; // Fixed height for model picker
   const imagePreviewHeight = images.length > 0 ? 140 : 0;
+  const pdfPreviewHeight = pdfs.length > 0 ? 120 : 0;
   const warningHeight = modelWarning ? 45 : 0;
   const inputSectionHeight = Math.max(inputHeight + 60, 100); // Ensure minimum height
-  const totalHeight = modelSectionHeight + imagePreviewHeight + warningHeight + inputSectionHeight;
+  const totalHeight =
+    modelSectionHeight + imagePreviewHeight + pdfPreviewHeight + warningHeight + inputSectionHeight;
 
   // Simple animated styles
   const animatedContainerStyle = useAnimatedStyle(() => {
@@ -489,6 +774,25 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
             </View>
           )}
 
+          {/* PDF Preview Section */}
+          {pdfs.length > 0 && (
+            <View
+              style={{
+                borderBottomColor: colors.border,
+                height: pdfPreviewHeight,
+              }}
+              className='border-b px-4 py-2'
+            >
+              <PDFPickerItem
+                pdf={pdfs[0]}
+                onRemove={handleDeletePDF}
+                showSize={true}
+                showTitle={true}
+                thumbnailSize={50}
+              />
+            </View>
+          )}
+
           {/* Input area */}
           <View className='flex-1 px-4 py-3'>
             <TouchableOpacity
@@ -549,19 +853,42 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
                 <TouchableOpacity
                   className='p-2 mr-2'
                   onPress={handleGalleryPress}
-                  disabled={disabled || isPickingImages}
+                  disabled={disabled || isPickingImages || pdfs.length > 0}
                   style={{
-                    opacity: disabled || isPickingImages ? 0.5 : 1,
+                    opacity: disabled || isPickingImages || pdfs.length > 0 ? 0.5 : 1,
                   }}
                 >
                   <ImageIcon
                     size={20}
-                    color={disabled || isPickingImages ? colors.placeholder : colors.icon}
+                    color={
+                      disabled || isPickingImages || pdfs.length > 0
+                        ? colors.placeholder
+                        : colors.icon
+                    }
                   />
                 </TouchableOpacity>
 
-                {/* Image count indicator */}
-                {images.length > 0 && (
+                {/* PDF Picker Button */}
+                <TouchableOpacity
+                  className='p-2 mr-2'
+                  onPress={handlePDFPickerPress}
+                  disabled={disabled || isPickingPDF || images.length > 0}
+                  style={{
+                    opacity: disabled || isPickingPDF || images.length > 0 ? 0.5 : 1,
+                  }}
+                >
+                  <FileText
+                    size={20}
+                    color={
+                      disabled || isPickingPDF || images.length > 0
+                        ? colors.placeholder
+                        : colors.icon
+                    }
+                  />
+                </TouchableOpacity>
+
+                {/* Attachment count indicator */}
+                {(images.length > 0 || pdfs.length > 0) && (
                   <View
                     style={{
                       backgroundColor: colors.sendButton.active,
@@ -578,7 +905,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
                         fontWeight: '500',
                       }}
                     >
-                      {images.length}
+                      {images.length > 0 ? images.length : 'PDF'}
                     </Text>
                   </View>
                 )}
@@ -606,21 +933,24 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
               ) : (
                 <TouchableOpacity
                   onPress={handleSend}
-                  disabled={disabled || (!text.trim() && images.length === 0)}
+                  disabled={disabled || (!text.trim() && images.length === 0 && pdfs.length === 0)}
                   className='rounded-full px-4 py-2'
                   style={{
                     backgroundColor:
-                      !disabled && (text.trim() || images.length > 0)
+                      !disabled && (text.trim() || images.length > 0 || pdfs.length > 0)
                         ? colors.sendButton.active
                         : colors.sendButton.inactive,
-                    opacity: disabled || (!text.trim() && images.length === 0) ? 0.5 : 1,
+                    opacity:
+                      disabled || (!text.trim() && images.length === 0 && pdfs.length === 0)
+                        ? 0.5
+                        : 1,
                   }}
                 >
                   <Text
                     className='font-medium'
                     style={{
                       color:
-                        !disabled && (text.trim() || images.length > 0)
+                        !disabled && (text.trim() || images.length > 0 || pdfs.length > 0)
                           ? colors.sendText.active
                           : colors.sendText.inactive,
                     }}

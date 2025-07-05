@@ -176,6 +176,93 @@ export const validateModelForImages = (
   return { canProceed: true };
 };
 
+export const validateModelForPDFs = (
+  modelKey: string | null,
+  hasPDFs: boolean
+): {
+  canProceed: boolean;
+  warning?: string;
+  suggestion?: string;
+} => {
+  if (!hasPDFs) {
+    return { canProceed: true };
+  }
+
+  if (!modelKey) {
+    return {
+      canProceed: false,
+      warning: 'No model selected',
+      suggestion: 'Please select a model',
+    };
+  }
+
+  const model = useModelsStore.getState().getModelByKey(modelKey);
+
+  if (!model) {
+    return {
+      canProceed: false,
+      warning: 'Model not found',
+      suggestion: 'Please select a valid model',
+    };
+  }
+
+  if (!model.supportsVision) {
+    return {
+      canProceed: false,
+      warning: `${model.name} doesn't support PDF documents`,
+      suggestion: 'Switch to a vision-capable model like GPT-4V or Gemini Pro Vision',
+    };
+  }
+
+  return { canProceed: true };
+};
+
+export const validateModelForAttachments = (
+  modelKey: string | null,
+  hasImages: boolean,
+  hasPDFs: boolean
+): {
+  canProceed: boolean;
+  warning?: string;
+  suggestion?: string;
+} => {
+  if (!hasImages && !hasPDFs) {
+    return { canProceed: true };
+  }
+
+  if (!modelKey) {
+    return {
+      canProceed: false,
+      warning: 'No model selected',
+      suggestion: 'Please select a model',
+    };
+  }
+
+  const model = useModelsStore.getState().getModelByKey(modelKey);
+
+  if (!model) {
+    return {
+      canProceed: false,
+      warning: 'Model not found',
+      suggestion: 'Please select a valid model',
+    };
+  }
+
+  if (!model.supportsVision) {
+    const attachmentTypes = [];
+    if (hasImages) attachmentTypes.push('images');
+    if (hasPDFs) attachmentTypes.push('PDF documents');
+
+    return {
+      canProceed: false,
+      warning: `${model.name} doesn't support ${attachmentTypes.join(' or ')}`,
+      suggestion: 'Switch to a vision-capable model like GPT-4V or Gemini Pro Vision',
+    };
+  }
+
+  return { canProceed: true };
+};
+
 // Hook for getting recommended model for images
 export const useRecommendedImageModel = () => {
   const visionModels = useModelsStore(state => state.getVisionModels());

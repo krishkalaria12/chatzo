@@ -9,7 +9,7 @@ import { api } from '../_generated/api';
  */
 export const generateThreadTitle = action({
   args: {
-    messages: v.array(v.any()), // Accept full message objects (can include images)
+    messages: v.array(v.any()), // Accept full message objects (can include images and PDFs)
   },
   handler: async (ctx, args) => {
     const { messages } = args;
@@ -24,11 +24,37 @@ export const generateThreadTitle = action({
       // Always use gemini-2.0-flash for title generation
       const model = google('gemini-2.0-flash');
 
+      // Convert messages to AI SDK format for title generation
+      const titleMessages = messages.map((msg: any) => {
+        return {
+          role: msg.role,
+          content: Array.isArray(msg.content)
+            ? msg.content.map((part: any) => {
+                if (part.type === 'text') {
+                  return { type: 'text' as const, text: part.text };
+                }
+                if (part.type === 'image') {
+                  return { type: 'image' as const, image: part.image };
+                }
+                if (part.type === 'file' && part.mimeType === 'application/pdf') {
+                  // Convert PDF file to AI SDK format
+                  return {
+                    type: 'file' as const,
+                    data: new URL(part.data),
+                    mimeType: 'application/pdf' as const,
+                  };
+                }
+                return part;
+              })
+            : msg.content,
+        };
+      });
+
       // Use generateText with multimodal support
       const { text } = await generateText({
         model,
         system: TITLE_GENERATION_SYSTEM_PROMPT,
-        messages,
+        messages: titleMessages,
         temperature: 0.3,
         maxTokens: 20, // Very short for title generation
       });
@@ -45,6 +71,7 @@ export const generateThreadTitle = action({
       // Fallback: always use 'New Chat'
       return { title: FALLBACK_TITLE };
     } catch (error) {
+      console.error('Title generation error:', error);
       // Fallback: always use 'New Chat'
       return {
         title: 'New Chat',

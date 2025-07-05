@@ -29,6 +29,7 @@ import { useNavigation, useLocalSearchParams } from 'expo-router';
 import { useThreadVersion } from '@/store/thread-version-store';
 import { useModelsStore } from '@/store/models-store';
 import { cn } from '@/lib/utils';
+import { ImageAttachment, PDFAttachment } from '@/lib/types/attachments';
 
 export default function HomePage() {
   const { user } = useUser();
@@ -193,26 +194,23 @@ export default function HomePage() {
     setMessages([]);
   };
 
-  // Interface for image attachments matching auto-resizing-input
-  interface ImageAttachment {
-    id: string;
-    uri: string;
-    cloudinaryPublicId?: string;
-    name: string;
-    size?: number;
-    isUploading?: boolean;
-    uploadProgress?: number;
-    error?: string;
-  }
-
-  // Custom input handler with image support - using Cloudinary URLs
-  const handleSendMessage = async (text: string, images?: ImageAttachment[]) => {
-    if ((!text.trim() && (!images || images.length === 0)) || isLoading || !user?.id) return;
+  // Custom input handler with image and PDF support - using Cloudinary URLs
+  const handleSendMessage = async (
+    text: string,
+    images?: ImageAttachment[],
+    pdfs?: PDFAttachment[]
+  ) => {
+    if (
+      (!text.trim() && (!images || images.length === 0) && (!pdfs || pdfs.length === 0)) ||
+      isLoading ||
+      !user?.id
+    )
+      return;
 
     const shouldFetchThreadAfter = !currentThread;
 
-    // Use createMessageContent with Cloudinary URLs
-    const messageContent = chatAPI.createMessageContent(text, images);
+    // Use createMessageContent with Cloudinary URLs for both images and PDFs
+    const messageContent = chatAPI.createMessageContent(text, images, pdfs);
 
     await append({
       role: 'user',
@@ -460,7 +458,6 @@ export default function HomePage() {
             className={cn('bg-background border-t border-border')}
             style={{
               paddingTop: 8,
-              paddingBottom: Platform.OS === 'ios' ? 10 : 5,
             }}
           >
             <AutoResizingInput

@@ -90,11 +90,12 @@ class ChatAPI {
 
   /**
    * Helper function to create AI SDK compatible message content
-   * Combines text and images into proper content array format
+   * Combines text, images, and PDFs into proper content array format
    */
   createMessageContent(
     text?: string,
-    images?: { uri: string; cloudinaryPublicId?: string; name: string }[]
+    images?: { uri: string; cloudinaryPublicId?: string; name: string }[],
+    pdfs?: { uri: string; cloudinaryPublicId?: string; name: string; size?: number }[]
   ): MessageContent {
     const parts: ContentPart[] = [];
 
@@ -118,13 +119,27 @@ class ChatAPI {
       }
     }
 
+    // Add PDF parts if present - use Cloudinary URLs
+    if (pdfs && pdfs.length > 0) {
+      for (const pdf of pdfs) {
+        // The `uri` now holds the full Cloudinary URL after upload
+        parts.push({
+          type: 'file',
+          url: pdf.uri,
+          fileName: pdf.name,
+          fileSize: pdf.size,
+          mimeType: 'application/pdf',
+        });
+      }
+    }
+
     // Return appropriate format based on content
     if (parts.length === 0) {
       return ''; // Empty content
     } else if (parts.length === 1 && parts[0].type === 'text') {
       return parts[0].text; // Simple string for text-only
     } else {
-      return parts; // Array format for mixed content or images
+      return parts; // Array format for mixed content or attachments
     }
   }
 
