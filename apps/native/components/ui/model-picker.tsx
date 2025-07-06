@@ -67,7 +67,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onModel
         {models.map(model => (
           <Picker.Item
             key={model.key}
-            label={`${model.providerDisplayName}: ${model.name}`}
+            label={`${model.provider.charAt(0).toUpperCase() + model.provider.slice(1)}: ${model.name}`}
             value={model.key}
             color={Platform.OS === 'ios' ? pickerTextColor : undefined}
           />

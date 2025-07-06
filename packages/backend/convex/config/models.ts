@@ -1,116 +1,101 @@
-export interface AIModel {
+import { google } from '@ai-sdk/google';
+import { mistral } from '@ai-sdk/mistral';
+import { LanguageModel } from 'ai';
+
+export type ModelAbility = 'vision' | 'function_calling' | 'pdf' | 'reasoning' | 'effort_control';
+
+export const CoreProviders = ['google', 'mistral'] as const;
+export type CoreProvider = (typeof CoreProviders)[number];
+export type ModelDefinitionProviders = CoreProvider;
+
+export type SharedModel<Abilities extends ModelAbility[] = ModelAbility[]> = {
   id: string;
   name: string;
-  description: string;
-  maxTokens: number;
-  temperature: number;
-  supportsVision: boolean;
-  supportsTools: boolean;
-  provider: 'google' | 'mistral';
-  contextWindow: number;
-  outputTokens: number;
-}
+  provider: CoreProvider;
+  abilities: Abilities;
+  mode?: 'text' | 'image';
+};
 
-export const ALL_MODELS: Record<string, AIModel> = {
-  // Google Generative AI Models
-  'gemini-2.5-pro': {
+export const MODELS_SHARED: SharedModel[] = [
+  // Google Models
+  {
     id: 'gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
-    description: 'Most capable model with advanced reasoning and multimodal capabilities',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
     provider: 'google',
-    contextWindow: 2000000,
-    outputTokens: 8192,
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
   },
-  'gemini-2.5-flash': {
-    id: 'gemini-2.5-flash-preview-04-17',
+  {
+    id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash',
-    description: 'Fast, efficient model with reasoning capabilities and large context',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
     provider: 'google',
-    contextWindow: 1000000,
-    outputTokens: 8192,
+    abilities: ['vision', 'function_calling', 'reasoning', 'pdf', 'effort_control'],
   },
-  'gemini-2.0-flash': {
-    id: 'gemini-2.0-flash-exp',
+  {
+    id: 'gemini-2.0-flash',
     name: 'Gemini 2.0 Flash',
-    description: 'Latest multimodal model with image generation and grounding',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
     provider: 'google',
-    contextWindow: 1000000,
-    outputTokens: 8192,
+    abilities: ['vision', 'function_calling', 'pdf'],
   },
-
-  // Mistral AI Models
-  'pixtral-large': {
-    id: 'pixtral-large-latest',
+  // Mistral Models
+  {
+    id: 'pixtral-large',
     name: 'Pixtral Large',
-    description: 'Advanced multimodal model with excellent vision and reasoning capabilities',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
     provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
+    abilities: ['vision', 'function_calling', 'reasoning'],
   },
-  'mistral-large': {
-    id: 'mistral-large-latest',
+  {
+    id: 'mistral-large',
     name: 'Mistral Large',
-    description: 'Most capable Mistral model for complex reasoning and analysis tasks',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
     provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
+    abilities: ['function_calling', 'reasoning'],
   },
-  'mistral-small': {
-    id: 'mistral-small-latest',
+  {
+    id: 'mistral-small',
     name: 'Mistral Small',
-    description: 'Fast and efficient model optimized for everyday tasks',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
     provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
+    abilities: ['function_calling'],
   },
-  'ministral-8b': {
-    id: 'ministral-8b-latest',
-    name: 'Ministral 8B',
-    description: 'Compact model with excellent performance-to-size ratio',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
+  {
+    id: 'mistral-8b',
+    name: 'Mistral 8B',
     provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
+    abilities: ['function_calling'],
   },
+] as const;
+
+export const getModelById = (modelId: string) =>
+  MODELS_SHARED.find(model => model.id === modelId) || null;
+
+/**
+ * Lightweight factory that returns a LanguageModel instance for a given model key.
+ */
+export const createAIModel = (modelKey: string, options?: any): LanguageModel => {
+  const modelConfig = getModelById(modelKey);
+  if (!modelConfig) {
+    throw new Error(`Unknown model: ${modelKey}`);
+  }
+
+  switch (modelConfig.provider) {
+    case 'google':
+      return google(modelConfig.id, options);
+    case 'mistral':
+      return mistral(modelConfig.id, options);
+    default: {
+      // Exhaustive check for TypeScript completeness
+      throw new Error(`Unsupported provider: ${modelConfig.provider}`);
+    }
+  }
+};
+
+// Backwards-compatibility alias
+export const getModelConfig = getModelById;
+
+export const getAllModels = () => {
+  return MODELS_SHARED;
+};
+
+export const getModelsByProvider = (provider: CoreProvider) => {
+  return MODELS_SHARED.filter(model => model.provider === provider);
 };
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
-
-export const getModelById = (modelKey: string): AIModel | null => {
-  return ALL_MODELS[modelKey] || null;
-};
-
-export const getAllModels = (): AIModel[] => {
-  return Object.values(ALL_MODELS);
-};
-
-export const getModelsByProvider = (provider: 'google' | 'mistral'): AIModel[] => {
-  return Object.values(ALL_MODELS).filter(model => model.provider === provider);
-};

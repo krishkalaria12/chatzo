@@ -4,17 +4,11 @@ export interface DisplayModel {
   key: string;
   id: string;
   name: string;
-  description: string;
   provider: string;
-  providerDisplayName: string;
-  providerIcon: string;
-  providerColor: string;
+  abilities: string[];
+  contextWindow?: number;
   supportsVision: boolean;
   supportsTools: boolean;
-  contextWindow: number;
-  maxTokens: number;
-  temperature: number;
-  outputTokens: number;
 }
 
 // Cache for models to avoid repeated API calls
@@ -36,7 +30,29 @@ export async function fetchModels(): Promise<DisplayModel[]> {
     const data = await response.json();
 
     if (response.ok) {
-      const sortedModels = data.models.sort((a: DisplayModel, b: DisplayModel) => {
+      const processed = (
+        data.models as {
+          id: string;
+          name: string;
+          provider: string;
+          abilities: string[];
+          contextWindow?: number;
+        }[]
+      ).map(m => {
+        const abilities = m.abilities || [];
+        return {
+          key: m.id,
+          id: m.id,
+          name: m.name,
+          provider: m.provider,
+          abilities,
+          contextWindow: m.contextWindow,
+          supportsVision: abilities.includes('vision'),
+          supportsTools: abilities.includes('function_calling'),
+        } as DisplayModel;
+      });
+
+      const sortedModels = processed.sort((a: DisplayModel, b: DisplayModel) => {
         if (a.provider !== b.provider) {
           return a.provider.localeCompare(b.provider);
         }

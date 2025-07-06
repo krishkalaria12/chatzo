@@ -1,7 +1,7 @@
 interface ModelInfo {
   name: string;
   id: string;
-  description: string;
+  description?: string;
   provider: string;
   supportsVision?: boolean;
   supportsTools?: boolean;
@@ -192,7 +192,7 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
 
   return SYSTEM_PROMPT_TEMPLATE.replace('{modelName}', model.name)
     .replace('{modelId}', model.id)
-    .replace('{modelDescription}', model.description)
+    .replace('{modelDescription}', model.description || '')
     .replace('{additionalCapabilities}', capabilitiesText)
     .replace('{imageGuidelines}', imageGuidelines)
     .replace('{providerName}', providerName);

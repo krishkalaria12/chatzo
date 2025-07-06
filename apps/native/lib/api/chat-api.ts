@@ -256,7 +256,7 @@ class ChatAPI {
   async generateTitle(
     clerkId: string,
     messages: string[],
-    model: string = 'gemini-2.5-flash',
+    model: string = 'gemini-2.0-flash',
     threadId?: string
   ): Promise<{ title: string; category: string; confidence: number }> {
     const response = await fetch(`${this.baseUrl}/api/chat/generate-title`, {

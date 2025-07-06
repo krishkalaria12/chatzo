@@ -129,7 +129,7 @@ export const completions = httpAction(async (ctx, request) => {
 
     // Use AI SDK directly for proper streaming
     const { streamText } = await import('ai');
-    const { createAIModel, getModelConfig } = await import('../../providers/model_factory');
+    const { createAIModel, getModelConfig } = await import('../../config/models');
     const { getSystemPrompt } = await import('../../config/prompts');
 
     // Get model configuration for backward compatibility
@@ -229,8 +229,8 @@ export const completions = httpAction(async (ctx, request) => {
       model: aiModel,
       system: systemPrompt,
       messages: contextMessages,
-      temperature: temperature ?? modelConfig.temperature,
-      maxTokens: max_tokens ?? modelConfig.maxTokens,
+      temperature: temperature,
+      maxTokens: max_tokens,
       onFinish: async completion => {
         const endTime = Date.now();
         const duration = endTime - startTime;
