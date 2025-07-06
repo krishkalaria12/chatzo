@@ -5,10 +5,11 @@ import {
   parseRequestBody,
   createErrorResponse,
 } from '../../services/middleware';
+import { getToolkit, type AbilityId } from '../../lib/toolkit';
 
 /**
  * POST /api/chat/completions
- * AI chat completion endpoint with streaming and parallel title generation
+ * AI chat completion endpoint with streaming, tool calling, and parallel title generation
  */
 export const completions = httpAction(async (ctx, request) => {
   try {
@@ -21,6 +22,8 @@ export const completions = httpAction(async (ctx, request) => {
       max_tokens,
       thread_id,
       generate_title = true,
+      enabledTools = [], // New parameter for enabled tools
+      maxSteps = 5, // Allow multi-step tool calling
     } = body;
 
     // Get internal userId from clerkId
@@ -149,6 +152,9 @@ export const completions = httpAction(async (ctx, request) => {
       );
     }
 
+    // Get tools if enabled
+    const tools = enabledTools.length > 0 ? await getToolkit(ctx, enabledTools as AbilityId[]) : {};
+
     // Use intelligent context compression for existing threads
     let contextMessages = aiMessages;
     let contextCompressed = false;
@@ -229,6 +235,9 @@ export const completions = httpAction(async (ctx, request) => {
       model: aiModel,
       system: systemPrompt,
       messages: contextMessages,
+      tools: Object.keys(tools).length > 0 ? tools : undefined,
+      toolChoice: enabledTools.length > 0 ? 'auto' : undefined,
+      maxSteps: maxSteps,
       temperature: temperature,
       maxTokens: max_tokens,
       onFinish: async completion => {
@@ -266,13 +275,32 @@ export const completions = httpAction(async (ctx, request) => {
                     threadId: currentThreadId,
                     role: 'user',
                     content: contentToSave,
-                    metadata: {},
+                    metadata: {
+                      toolsEnabled: enabledTools.length > 0 ? enabledTools : undefined,
+                    },
                   })
                 );
               }
             }
 
-            // Save assistant message
+            // Save assistant message with tool call information
+            const toolCalls =
+              completion.toolCalls && Array.isArray(completion.toolCalls)
+                ? completion.toolCalls.map(call => {
+                    // Find the corresponding tool result if it exists
+                    const toolResult = (completion as any).toolResults?.find(
+                      (r: any) => r.toolCallId === call.toolCallId
+                    );
+
+                    return {
+                      toolCallId: call.toolCallId,
+                      toolName: call.toolName,
+                      args: call.args,
+                      result: toolResult?.result,
+                    };
+                  })
+                : undefined;
+
             promises.push(
               ctx.runMutation(api.services.message_service.saveMessage, {
                 threadId: currentThreadId,
@@ -284,6 +312,8 @@ export const completions = httpAction(async (ctx, request) => {
                   promptTokens: completion.usage.promptTokens,
                   completionTokens: completion.usage.completionTokens,
                   duration,
+                  toolsEnabled: enabledTools.length > 0 ? enabledTools : undefined,
+                  toolCalls,
                 },
               })
             );
@@ -320,6 +350,8 @@ export const completions = httpAction(async (ctx, request) => {
         const endTime = Date.now();
         const duration = endTime - startTime;
 
+        console.error('Chat completion error:', error);
+
         // Track failed usage event
         if (currentThreadId) {
           try {
@@ -350,6 +382,7 @@ export const completions = httpAction(async (ctx, request) => {
         'X-Is-New-Thread': isNewThread.toString(),
         'X-Context-Compressed': contextCompressed.toString(),
         'X-Context-Message-Count': contextMessages.length.toString(),
+        'X-Tools-Enabled': enabledTools.join(','),
       },
     });
   } catch (error) {

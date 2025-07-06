@@ -16,7 +16,7 @@ import Animated, {
   withSpring,
   interpolate,
 } from 'react-native-reanimated';
-import { Camera, Image as ImageIcon, X, FileText } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, X, FileText, Search } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useColorScheme } from '@/lib/use-color-scheme';
@@ -33,7 +33,12 @@ import { isImageFormatSupported, isPDFFile } from '@/utils/cloudinary';
 import { ImageAttachment, PDFAttachment } from '@/lib/types/attachments';
 
 interface AutoResizingInputProps {
-  onSend?: (text: string, images?: ImageAttachment[], pdfs?: PDFAttachment[]) => void;
+  onSend?: (
+    text: string,
+    images?: ImageAttachment[],
+    pdfs?: PDFAttachment[],
+    enabledTools?: string[]
+  ) => void;
   placeholder?: string;
   selectedModel?: string;
   onModelChange?: (modelKey: string) => void;
@@ -42,6 +47,8 @@ interface AutoResizingInputProps {
   disabled?: boolean;
   isStreaming?: boolean;
   onStop?: () => void;
+  webSearchEnabled?: boolean;
+  onWebSearchToggle?: (enabled: boolean) => void;
 }
 
 export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
@@ -54,6 +61,8 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   disabled = false,
   isStreaming = false,
   onStop,
+  webSearchEnabled = false,
+  onWebSearchToggle,
 }) => {
   const [text, setText] = useState('');
   const [inputHeight, setInputHeight] = useState(40);
@@ -62,6 +71,7 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
   const [isPickingImages, setIsPickingImages] = useState(false);
   const [isPickingPDF, setIsPickingPDF] = useState(false);
   const [modelWarning, setModelWarning] = useState<string | null>(null);
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(webSearchEnabled);
   const inputRef = useRef<TextInput>(null);
   const { isDarkColorScheme } = useColorScheme();
 
@@ -81,10 +91,19 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       inactive: isDarkColorScheme ? '#6b7280' : '#64748b',
     },
     modelSection: isDarkColorScheme ? '#111827' : '#ffffff',
+    webSearch: {
+      active: isDarkColorScheme ? '#059669' : '#10b981',
+      inactive: isDarkColorScheme ? '#374151' : '#d1d5db',
+    },
   };
 
   // Animation for send button press
   const animationProgress = useSharedValue(0);
+
+  // Sync external web search state
+  React.useEffect(() => {
+    setIsWebSearchEnabled(webSearchEnabled);
+  }, [webSearchEnabled]);
 
   // Check model validation when attachments or model changes
   React.useEffect(() => {
@@ -190,10 +209,17 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
       const validImages = images.filter(img => !img.isUploading && !img.error);
       const validPDFs = pdfs.filter(pdf => !pdf.isUploading && !pdf.error);
 
+      // Build enabled tools array
+      const enabledTools: string[] = [];
+      if (isWebSearchEnabled) {
+        enabledTools.push('web_search');
+      }
+
       onSend?.(
         text.trim(),
         validImages.length > 0 ? validImages : undefined,
-        validPDFs.length > 0 ? validPDFs : undefined
+        validPDFs.length > 0 ? validPDFs : undefined,
+        enabledTools.length > 0 ? enabledTools : undefined
       );
       setText('');
       setImages([]);
@@ -681,6 +707,13 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
     inputRef.current?.focus();
   };
 
+  // Handle web search toggle
+  const handleWebSearchToggle = () => {
+    const newValue = !isWebSearchEnabled;
+    setIsWebSearchEnabled(newValue);
+    onWebSearchToggle?.(newValue);
+  };
+
   // Calculate container height with proper spacing
   const modelSectionHeight = 50; // Fixed height for model picker
   const imagePreviewHeight = images.length > 0 ? 140 : 0;
@@ -834,6 +867,24 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
             <View className='flex-row items-center justify-between mt-3'>
               {/* Left side icons */}
               <View className='flex-row items-center'>
+                {/* Web Search Toggle */}
+                <TouchableOpacity
+                  className='p-2 mr-2 rounded-md'
+                  onPress={handleWebSearchToggle}
+                  disabled={disabled}
+                  style={{
+                    backgroundColor: isWebSearchEnabled ? colors.webSearch.active : 'transparent',
+                    opacity: disabled ? 0.5 : 1,
+                  }}
+                >
+                  <Search
+                    size={20}
+                    color={
+                      disabled ? colors.placeholder : isWebSearchEnabled ? '#ffffff' : colors.icon
+                    }
+                  />
+                </TouchableOpacity>
+
                 {/* Camera Button */}
                 <TouchableOpacity
                   className='p-2 mr-2'
@@ -906,6 +957,29 @@ export const AutoResizingInput: React.FC<AutoResizingInputProps> = ({
                       }}
                     >
                       {images.length > 0 ? images.length : 'PDF'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Web search indicator */}
+                {isWebSearchEnabled && (
+                  <View
+                    style={{
+                      backgroundColor: colors.webSearch.active,
+                      borderRadius: 10,
+                      paddingHorizontal: 6,
+                      paddingVertical: 2,
+                      marginRight: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: '#ffffff',
+                        fontSize: 12,
+                        fontWeight: '500',
+                      }}
+                    >
+                      Web
                     </Text>
                   </View>
                 )}

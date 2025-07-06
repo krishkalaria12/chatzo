@@ -20,8 +20,26 @@ export const FileContentPart = v.object({
   mimeType: v.optional(v.string()),
 });
 
-// Content part union
-export const ContentPart = v.union(TextContentPart, ImageContentPart, FileContentPart);
+// Tool invocation part for AI SDK tool calling
+export const ToolInvocationUIPart = v.object({
+  type: v.literal('tool-invocation'),
+  toolInvocation: v.object({
+    state: v.union(v.literal('call'), v.literal('result'), v.literal('partial-call')),
+    args: v.optional(v.any()),
+    result: v.optional(v.any()),
+    toolCallId: v.string(),
+    toolName: v.string(),
+    step: v.optional(v.number()),
+  }),
+});
+
+// Content part union - now includes tool invocation
+export const ContentPart = v.union(
+  TextContentPart,
+  ImageContentPart,
+  FileContentPart,
+  ToolInvocationUIPart
+);
 
 // Message content can be:
 // 1. Simple string (legacy support)
@@ -39,6 +57,18 @@ export const MessageMetadata = v.object({
   duration: v.optional(v.number()), // Duration in milliseconds (alternative to serverDurationMs)
   temperature: v.optional(v.number()),
   maxTokens: v.optional(v.number()),
+  toolsEnabled: v.optional(v.array(v.string())), // Track which tools were enabled for this message
+  toolCalls: v.optional(
+    v.array(
+      v.object({
+        toolCallId: v.string(),
+        toolName: v.string(),
+        args: v.any(),
+        result: v.optional(v.any()),
+        error: v.optional(v.string()),
+      })
+    )
+  ), // Track tool calls made during this message
 });
 
 // HTTP AI Message (for API requests/responses)

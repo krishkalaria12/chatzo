@@ -30,6 +30,7 @@ You are intelligent, thoughtful, and adaptive. You aim to understand the user's 
 - Be honest about your limitations
 - Maintain a helpful and professional tone
 {imageGuidelines}
+{toolGuidelines}
 
 **Response Format Restrictions:**
 - ALWAYS format your responses using proper Markdown syntax
@@ -162,6 +163,8 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
 
   if (model.supportsTools) {
     additionalCapabilities.push('- Using tools and functions when appropriate');
+    additionalCapabilities.push('- Performing web searches to find current information');
+    additionalCapabilities.push('- Accessing real-time data and recent developments');
   }
 
   if (model.contextWindow && model.contextWindow > 500000) {
@@ -183,6 +186,19 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
 - Be helpful and offer insights related to the visual content`
     : '';
 
+  const toolGuidelines = model.supportsTools
+    ? `
+
+**When using tools:**
+- Use web search when you need current information, recent events, or specific data not in your training
+- Use web search for breaking news, current weather, stock prices, or real-time information
+- Use web search when users ask about recent developments, current events, or specific facts
+- Always specify whether to scrape content for detailed information based on the query complexity
+- Provide clear, well-formatted responses based on search results
+- Cite sources when appropriate and mention when information comes from web search
+- Be transparent about when you're using tools vs. your existing knowledge`
+    : '';
+
   const providerName =
     model.provider === 'google'
       ? 'Google'
@@ -195,6 +211,7 @@ export const generateSystemPrompt = (model: ModelInfo): string => {
     .replace('{modelDescription}', model.description || '')
     .replace('{additionalCapabilities}', capabilitiesText)
     .replace('{imageGuidelines}', imageGuidelines)
+    .replace('{toolGuidelines}', toolGuidelines)
     .replace('{providerName}', providerName);
 };
 

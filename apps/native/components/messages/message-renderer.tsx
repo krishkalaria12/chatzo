@@ -2,6 +2,7 @@ import React, { memo, useState } from 'react';
 import { View, Text, TouchableOpacity, Dimensions, Alert, TextInput } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { MarkdownContent } from './markdown-content';
+import { ToolInvocation } from './tool-invocation';
 import { EnhancedImage } from '@/components/images';
 import { PDFRenderer } from '@/components/documents';
 import { useColorScheme } from '@/lib/use-color-scheme';
@@ -189,18 +190,10 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
       return (
         <View style={{ marginTop: 8, marginBottom: 4 }}>
           <PDFRenderer
-            url={content.url}
             fileName={content.fileName}
             fileSize={content.fileSize}
-            mimeType={content.mimeType}
             maxWidth={maxWidth}
             maxHeight={maxHeight}
-            showDownload={true}
-            showPreview={true}
-            onPress={() => {
-              // Future: Add full-screen PDF preview
-              Alert.alert('PDF Preview', 'Full PDF preview coming soon!');
-            }}
           />
         </View>
       );
@@ -233,6 +226,9 @@ export const MessageRenderer: React.FC<MessageRendererProps> = memo(
           return renderImageContent(part);
         case 'file':
           return renderFileContent(part);
+        case 'tool-invocation':
+          // Render tool invocation UI part
+          return <ToolInvocation toolInvocation={part.toolInvocation} />;
         default:
           return <Text style={{ color: theme.text }}>Unsupported content type</Text>;
       }

@@ -20,7 +20,23 @@ export type FileContentPart = {
   mimeType?: string;
 };
 
-export type ContentPart = TextContentPart | ImageContentPart | FileContentPart;
+export type ToolInvocationContentPart = {
+  type: 'tool-invocation';
+  toolInvocation: {
+    state: 'call' | 'result' | 'partial-call';
+    args?: any;
+    result?: any;
+    toolCallId: string;
+    toolName: string;
+    step?: number;
+  };
+};
+
+export type ContentPart =
+  | TextContentPart
+  | ImageContentPart
+  | FileContentPart
+  | ToolInvocationContentPart;
 
 // Message content types matching backend schema and AI SDK format
 export type MessageContent =

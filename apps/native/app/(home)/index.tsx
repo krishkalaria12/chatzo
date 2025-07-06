@@ -45,6 +45,7 @@ export default function HomePage() {
   const [currentThread, setCurrentThread] = useState<Thread | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   const lastHandledRef = useRef<string | undefined>(undefined);
 
@@ -64,6 +65,8 @@ export default function HomePage() {
       model: selectedModel,
       thread_id: currentThread?._id,
       generate_title: true,
+      enabledTools: webSearchEnabled ? ['web_search'] : [],
+      maxSteps: 5,
     },
     onError: error => {
       console.error('Chat error:', error);
@@ -77,7 +80,55 @@ export default function HomePage() {
         return; // Silently ignore cancelled requests
       }
 
-      Alert.alert('Chat Error', error.message || 'Unknown error occurred');
+      // Handle specific tool-related errors
+      let errorMessage = error.message || 'Unknown error occurred';
+      let errorTitle = 'Chat Error';
+
+      if (error.message?.includes('tool')) {
+        errorTitle = 'Tool Error';
+        if (error.message?.includes('web_search')) {
+          errorMessage = 'Web search failed. Please try again or disable web search.';
+        } else if (error.message?.includes('NoSuchToolError')) {
+          errorMessage = 'The requested tool is not available. Please try a different approach.';
+        } else if (error.message?.includes('InvalidToolArgumentsError')) {
+          errorMessage = 'Invalid tool parameters. Please rephrase your request.';
+        } else if (error.message?.includes('ToolExecutionError')) {
+          errorMessage = 'Tool execution failed. Please try again or disable tools.';
+        }
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorTitle = 'Connection Error';
+        errorMessage =
+          'Network connection failed. Please check your internet connection and try again.';
+      } else if (error.message?.includes('timeout')) {
+        errorTitle = 'Timeout Error';
+        errorMessage = 'Request timed out. Please try again with a shorter message.';
+      }
+
+      Alert.alert(errorTitle, errorMessage, [
+        { text: 'OK', style: 'default' },
+        ...(webSearchEnabled && error.message?.includes('web_search')
+          ? [
+              {
+                text: 'Disable Web Search',
+                style: 'destructive' as const,
+                onPress: () => setWebSearchEnabled(false),
+              },
+            ]
+          : []),
+        {
+          text: 'Retry',
+          style: 'default' as const,
+          onPress: () => {
+            // Retry the last message if there are messages
+            if (messages.length > 0) {
+              const lastMessage = messages[messages.length - 1];
+              if (lastMessage.role === 'user') {
+                handleRetry(lastMessage.id, selectedModel);
+              }
+            }
+          },
+        },
+      ]);
     },
     onFinish: () => {
       setTimeout(() => {
@@ -194,11 +245,12 @@ export default function HomePage() {
     setMessages([]);
   };
 
-  // Custom input handler with image and PDF support - using Cloudinary URLs
+  // Custom input handler with image, PDF, and tool support
   const handleSendMessage = async (
     text: string,
     images?: ImageAttachment[],
-    pdfs?: PDFAttachment[]
+    pdfs?: PDFAttachment[],
+    enabledTools?: string[]
   ) => {
     if (
       (!text.trim() && (!images || images.length === 0) && (!pdfs || pdfs.length === 0)) ||
@@ -230,6 +282,11 @@ export default function HomePage() {
         }
       }, 1500);
     }
+  };
+
+  // Handle web search toggle
+  const handleWebSearchToggle = (enabled: boolean) => {
+    setWebSearchEnabled(enabled);
   };
 
   // Load thread when param provided from drawer
@@ -467,6 +524,8 @@ export default function HomePage() {
               onModelChange={setSelectedModel}
               isStreaming={isLoading}
               onStop={stop}
+              webSearchEnabled={webSearchEnabled}
+              onWebSearchToggle={handleWebSearchToggle}
             />
           </View>
         </View>
