@@ -1,14 +1,6 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import {
-  // Message schemas
-  Message,
-  // Thread schemas
-  Thread,
-  // Usage schemas
-  UsageEvent,
-  DailyUsageSummary,
-} from './schemas';
+import { Message, SharedThread, Thread, UsageEvent, UserSettings } from './schemas';
 
 export default defineSchema({
   // User table for Clerk authentication
@@ -23,34 +15,22 @@ export default defineSchema({
     .index('by_clerk_id', ['clerkId'])
     .index('by_email', ['email']),
 
-  // Thread table for organizing conversations
   threads: defineTable(Thread)
-    .index('by_user_id', ['userId'])
-    .index('by_user_created', ['userId', 'createdAt'])
-    .index('by_user_updated', ['userId', 'updatedAt'])
-    .index('by_user_last_message', ['userId', 'lastMessageAt'])
-    .index('by_user_archived', ['userId', 'isArchived'])
-    .index('by_user_pinned', ['userId', 'isPinned']),
+    .index('byAuthor', ['authorId'])
+    .index('byProject', ['projectId'])
+    .index('byAuthorAndProject', ['authorId', 'projectId'])
+    .searchIndex('search_title', {
+      searchField: 'title',
+      filterFields: ['authorId'],
+    }),
 
-  // Message table for storing conversation messages
+  sharedThreads: defineTable(SharedThread).index('byAuthorId', ['authorId']),
+
   messages: defineTable(Message)
-    .index('by_thread_id', ['threadId'])
-    .index('by_thread_created', ['threadId', 'createdAt'])
-    .index('by_thread_role', ['threadId', 'role']),
+    .index('byThreadId', ['threadId'])
+    .index('byMessageId', ['messageId']),
 
-  // Usage events for tracking AI model usage
-  usageEvents: defineTable(UsageEvent)
-    .index('by_user_id', ['userId'])
-    .index('by_user_timestamp', ['userId', 'timestamp'])
-    .index('by_user_days_since_epoch', ['userId', 'daysSinceEpoch'])
-    .index('by_model_id', ['modelId'])
-    .index('by_thread_id', ['threadId'])
-    .index('by_status', ['status']),
+  settings: defineTable(UserSettings).index('byUser', ['userId']),
 
-  // Daily usage summaries for analytics
-  dailyUsageSummaries: defineTable(DailyUsageSummary)
-    .index('by_user_id', ['userId'])
-    .index('by_user_date', ['userId', 'date'])
-    .index('by_user_days_since_epoch', ['userId', 'daysSinceEpoch'])
-    .index('by_date', ['date']),
+  usageEvents: defineTable(UsageEvent).index('byUserDay', ['userId', 'daysSinceEpoch']),
 });

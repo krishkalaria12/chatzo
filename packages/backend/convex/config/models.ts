@@ -1,116 +1,460 @@
-export interface AIModel {
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createFal } from '@ai-sdk/fal';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGroq } from '@ai-sdk/groq';
+import { createOpenAI } from '@ai-sdk/openai';
+import type { ProviderV1 } from '@ai-sdk/provider';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import type { LanguageModelV1 } from 'ai';
+
+import type { ModelAbility } from '../schemas/settings';
+
+// ---------------------------------------------------------------------------
+// Core providers & helper types
+// ---------------------------------------------------------------------------
+export const CoreProviders = ['openai', 'anthropic', 'google', 'groq', 'fal'] as const;
+export type CoreProvider = (typeof CoreProviders)[number];
+export type ModelDefinitionProviders =
+  | CoreProvider // user BYOK key
+  | `i3-${CoreProvider}` // internal API key
+  | 'openrouter';
+
+export type RegistryKey = `${ModelDefinitionProviders | string}:${string}`;
+export type Provider = RegistryKey extends `${infer P}:${string}` ? P : never;
+
+export type BaseAspects = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '2:3' | '3:2';
+export type BaseResolution = `${number}x${number}`;
+export type AllAspects = (BaseAspects | `${BaseAspects}-hd`) & {};
+export type ImageSize = (AllAspects | BaseResolution) & {};
+
+export type SharedModel<Abilities extends ModelAbility[] = ModelAbility[]> = {
   id: string;
   name: string;
-  description: string;
-  maxTokens: number;
-  temperature: number;
-  supportsVision: boolean;
-  supportsTools: boolean;
-  provider: 'google' | 'mistral';
-  contextWindow: number;
-  outputTokens: number;
-}
+  shortName?: string;
+  adapters: RegistryKey[];
+  abilities: Abilities;
+  mode?: 'text' | 'image' | 'speech-to-text';
+  contextLength?: number;
+  maxTokens?: number;
+  supportedImageSizes?: ImageSize[];
+  customIcon?: 'stability-ai' | 'openai' | 'bflabs' | 'google' | 'meta';
+  supportsDisablingReasoning?: boolean;
+  // Added fields required by existing codebase ------------------------------
+  temperature?: number; // default temperature used when not provided by user
+};
 
-export const ALL_MODELS: Record<string, AIModel> = {
-  // Google Generative AI Models
-  'gemini-2.5-pro': {
+// ---------------------------------------------------------------------------
+// Models catalogue (copied verbatim from the user-provided snippet) ----------
+// ---------------------------------------------------------------------------
+export const MODELS_SHARED: SharedModel[] = [
+  {
+    id: 'gpt-4o',
+    name: 'GPT 4o',
+    shortName: '4o',
+    adapters: ['openai:gpt-4o', 'openrouter:openai/gpt-4o'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gpt-4o-mini',
+    name: 'GPT 4o mini',
+    shortName: '4o mini',
+    adapters: ['i3-openai:gpt-4o-mini', 'openai:gpt-4o-mini', 'openrouter:openai/gpt-4o-mini'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'o3-mini',
+    name: 'o3 mini',
+    adapters: ['openai:o3-mini', 'openrouter:openai/o3-mini'],
+    abilities: ['reasoning', 'function_calling', 'effort_control'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'o4-mini',
+    name: 'o4 mini',
+    adapters: ['openai:o4-mini', 'openrouter:openai/o4-mini'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'o3',
+    name: 'o3',
+    adapters: ['openai:o3', 'openrouter:openai/o3'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'o3-pro',
+    name: 'o3 pro',
+    adapters: ['openai:o3-pro', 'openrouter:openai/o3-pro'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gpt-4.1',
+    name: 'GPT 4.1',
+    adapters: ['openai:gpt-4.1', 'openrouter:openai/gpt-4.1'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gpt-4.1-mini',
+    name: 'GPT 4.1 mini',
+    shortName: '4.1 mini',
+    adapters: ['i3-openai:gpt-4.1-mini', 'openai:gpt-4.1-mini', 'openrouter:openai/gpt-4.1-mini'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gpt-4.1-nano',
+    name: 'GPT 4.1 nano',
+    shortName: '4.1 nano',
+    adapters: ['i3-openai:gpt-4.1-nano', 'openai:gpt-4.1-nano', 'openrouter:openai/gpt-4.1-nano'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'claude-opus-4',
+    name: 'Claude Opus 4',
+    shortName: 'Opus 4',
+    adapters: ['anthropic:claude-opus-4-0', 'openrouter:anthropic/claude-opus-4'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'claude-sonnet-4',
+    name: 'Claude Sonnet 4',
+    shortName: 'Sonnet 4',
+    adapters: ['anthropic:claude-sonnet-4-0', 'openrouter:anthropic/claude-sonnet-4'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'claude-3-7-sonnet',
+    name: 'Claude Sonnet 3.7',
+    shortName: 'Sonnet 3.7',
+    adapters: ['anthropic:claude-3-7-sonnet', 'openrouter:anthropic/claude-3.7-sonnet'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'claude-3-5-sonnet',
+    name: 'Claude Sonnet 3.5',
+    shortName: 'Sonnet 3.5',
+    adapters: ['anthropic:claude-3-5-sonnet', 'openrouter:anthropic/claude-3.5-sonnet'],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gemini-2.0-flash-lite',
+    name: 'Gemini 2.0 Flash Lite',
+    shortName: '2.0 Flash Lite',
+    adapters: [
+      'i3-google:gemini-2.0-flash-lite',
+      'google:gemini-2.0-flash-lite',
+      'openrouter:google/gemini-2.0-flash-lite-001',
+    ],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gemini-2.0-flash-image-generation',
+    name: 'Gemini 2.0 Flash Imagen',
+    shortName: '2.0 Flash Imagen',
+    adapters: ['i3-google:gemini-2.0-flash-exp', 'google:gemini-2.0-flash-exp'],
+    abilities: ['vision'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    shortName: '2.5 Flash',
+    adapters: [
+      'i3-google:gemini-2.5-flash',
+      'google:gemini-2.5-flash',
+      'openrouter:google/gemini-2.5-flash',
+    ],
+    abilities: ['vision', 'function_calling', 'reasoning', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash Lite',
+    shortName: '2.5 Flash Lite',
+    adapters: [
+      'i3-google:gemini-2.5-flash-lite-preview-06-17',
+      'google:gemini-2.5-flash-lite-preview-06-17',
+      'openrouter:google/gemini-2.5-flash-lite-preview-06-17',
+    ],
+    abilities: ['vision', 'function_calling', 'reasoning', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    shortName: '2.0 Flash',
+    adapters: [
+      'i3-google:gemini-2.0-flash',
+      'google:gemini-2.0-flash',
+      'openrouter:google/gemini-2.0-flash-001',
+    ],
+    abilities: ['vision', 'function_calling', 'pdf'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
     id: 'gemini-2.5-pro',
     name: 'Gemini 2.5 Pro',
-    description: 'Most capable model with advanced reasoning and multimodal capabilities',
-    maxTokens: 8192,
+    shortName: '2.5 Pro',
+    adapters: ['google:gemini-2.5-pro', 'openrouter:google/gemini-2.5-pro'],
+    abilities: ['reasoning', 'vision', 'function_calling', 'pdf', 'effort_control'],
+    supportsDisablingReasoning: true,
     temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
-    provider: 'google',
-    contextWindow: 2000000,
-    outputTokens: 8192,
-  },
-  'gemini-2.5-flash': {
-    id: 'gemini-2.5-flash-preview-04-17',
-    name: 'Gemini 2.5 Flash',
-    description: 'Fast, efficient model with reasoning capabilities and large context',
     maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
-    provider: 'google',
-    contextWindow: 1000000,
-    outputTokens: 8192,
   },
-  'gemini-2.0-flash': {
-    id: 'gemini-2.0-flash-exp',
-    name: 'Gemini 2.0 Flash',
-    description: 'Latest multimodal model with image generation and grounding',
+  // Image Generation Models --------------------------------------------------
+  {
+    id: 'gpt-image-1',
+    name: 'GPT Image 1',
+    adapters: ['openai:gpt-image-1'],
+    abilities: [],
+    mode: 'image',
+    supportedImageSizes: ['1024x1024', '1536x1024', '1024x1536'],
+    temperature: 0.7,
     maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
-    provider: 'google',
-    contextWindow: 1000000,
-    outputTokens: 8192,
   },
+  {
+    id: 'sdxl-lightning',
+    name: 'SDXL Lightning',
+    shortName: 'SDXL',
+    adapters: ['i3-fal:fal-ai/fast-lightning-sdxl', 'fal:fal-ai/fast-lightning-sdxl'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'stability-ai',
+    supportedImageSizes: ['1:1', '1:1-hd', '3:4', '4:3', '9:16', '16:9'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'flux-schnell',
+    name: 'FLUX.1 [schnell]',
+    shortName: 'flux.schnell',
+    adapters: ['i3-fal:fal-ai/flux/schnell', 'fal:fal-ai/flux/schnell'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'bflabs',
+    supportedImageSizes: ['1:1', '1:1-hd', '3:4', '4:3', '9:16', '16:9'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'flux-dev',
+    name: 'FLUX.1 [dev]',
+    shortName: 'flux.dev',
+    adapters: ['fal:fal-ai/flux/dev'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'bflabs',
+    supportedImageSizes: ['1:1', '1:1-hd', '3:4', '4:3', '9:16', '16:9'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'google-imagen-3-fast',
+    name: 'Google Imagen 3 (Fast)',
+    shortName: 'Imagen 3 (Fast)',
+    adapters: ['fal:fal-ai/imagen3/fast'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'google',
+    supportedImageSizes: ['1:1-hd', '16:9-hd', '9:16-hd', '3:4-hd', '4:3-hd'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'google-imagen-3',
+    name: 'Google Imagen 3',
+    shortName: 'Imagen 3',
+    adapters: ['fal:fal-ai/imagen3'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'google',
+    supportedImageSizes: ['1:1-hd', '16:9-hd', '9:16-hd', '3:4-hd', '4:3-hd'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'google-imagen-4',
+    name: 'Google Imagen 4',
+    shortName: 'Imagen 4',
+    adapters: ['fal:fal-ai/imagen4/preview'],
+    abilities: [],
+    mode: 'image',
+    customIcon: 'google',
+    supportedImageSizes: ['1:1-hd', '16:9-hd', '9:16-hd', '3:4-hd', '4:3-hd'],
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout 17B 16E',
+    shortName: 'Llama 4 Scout 17B',
+    adapters: [
+      'i3-groq:meta-llama/llama-4-scout-17b-16e-instruct',
+      'groq:meta-llama/llama-4-scout-17b-16e-instruct',
+    ],
+    abilities: ['vision'],
+    customIcon: 'meta',
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'llama-4-maverick-17b-128e-instruct',
+    name: 'Llama 4 Maverick 17B 128E Instruct',
+    shortName: 'Llama 4 Maverick 17B',
+    adapters: ['groq:meta-llama/llama-4-maverick-17b-128e-instruct'],
+    abilities: ['vision'],
+    customIcon: 'meta',
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'llama-3-1-8b-instant',
+    name: 'Llama 3.1 8B Instant',
+    shortName: 'Llama 3.1 8B',
+    adapters: ['i3-groq:llama-3.1-8b-instant', 'groq:llama-3.1-8b-instant'],
+    abilities: [],
+    customIcon: 'meta',
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+  {
+    id: 'whisper-large-v3-turbo',
+    name: 'Whisper Large v3 Turbo',
+    adapters: ['groq:whisper-large-v3-turbo'],
+    abilities: [],
+    mode: 'speech-to-text',
+    temperature: 0.7,
+    maxTokens: 8192,
+  },
+] as const;
 
-  // Mistral AI Models
-  'pixtral-large': {
-    id: 'pixtral-large-latest',
-    name: 'Pixtral Large',
-    description: 'Advanced multimodal model with excellent vision and reasoning capabilities',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: true,
-    supportsTools: true,
-    provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
-  },
-  'mistral-large': {
-    id: 'mistral-large-latest',
-    name: 'Mistral Large',
-    description: 'Most capable Mistral model for complex reasoning and analysis tasks',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
-    provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
-  },
-  'mistral-small': {
-    id: 'mistral-small-latest',
-    name: 'Mistral Small',
-    description: 'Fast and efficient model optimized for everyday tasks',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
-    provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
-  },
-  'ministral-8b': {
-    id: 'ministral-8b-latest',
-    name: 'Ministral 8B',
-    description: 'Compact model with excellent performance-to-size ratio',
-    maxTokens: 8192,
-    temperature: 0.7,
-    supportsVision: false,
-    supportsTools: true,
-    provider: 'mistral',
-    contextWindow: 128000,
-    outputTokens: 8192,
-  },
-};
-
+// ---------------------------------------------------------------------------
+// Helper functions -----------------------------------------------------------
+// ---------------------------------------------------------------------------
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
 
-export const getModelById = (modelKey: string): AIModel | null => {
-  return ALL_MODELS[modelKey] || null;
+export const getAllModels = (): SharedModel[] => [...MODELS_SHARED];
+
+export const getModelConfig = (
+  modelId: string
+): (SharedModel & { temperature: number; maxTokens: number }) | null => {
+  const model = MODELS_SHARED.find(m => m.id === modelId);
+  if (!model) return null;
+  return {
+    ...model,
+    temperature: model.temperature ?? 0.7,
+    maxTokens: model.maxTokens ?? 8192,
+  };
 };
 
-export const getAllModels = (): AIModel[] => {
-  return Object.values(ALL_MODELS);
+/**
+ * Build a fully-typed `LanguageModelV1` instance from a Chatzo model id.
+ * This inspects the first adapter string to identify the provider and the
+ * provider-specific model id, then delegates to `createProvider` which knows
+ * how to instantiate that provider with an appropriate API key.
+ */
+export const createAIModel = (modelId: string): LanguageModelV1 => {
+  const modelCfg = getModelConfig(modelId);
+  if (!modelCfg) {
+    throw new Error(`Unknown model: ${modelId}`);
+  }
+
+  // Use the first adapter entry – it has the form "<provider>:<providerModelId>"
+  const firstAdapter = modelCfg.adapters[0];
+  const separatorIdx = firstAdapter.indexOf(':');
+  if (separatorIdx === -1) {
+    throw new Error(`Invalid adapter format for model ${modelId}: ${firstAdapter}`);
+  }
+
+  const providerId = firstAdapter.slice(0, separatorIdx) as CoreProvider | 'openrouter' | 'fal';
+  const providerModelId = firstAdapter.slice(separatorIdx + 1);
+
+  // Use “internal” so createProvider will pick keys from env vars.
+  const provider = createProvider(providerId, 'internal');
+
+  // All providers expose a text model builder which returns LanguageModelV1
+  // compatible instances.
+  // Some models are for images/speech etc., but chat route only calls this for
+  // text models.
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore – the provider typings expose `.textModel` generically.
+  return provider.textModel(providerModelId);
 };
 
-export const getModelsByProvider = (provider: 'google' | 'mistral'): AIModel[] => {
-  return Object.values(ALL_MODELS).filter(model => model.provider === provider);
+// ---------------------------------------------------------------------------
+// Provider (BYOK) factory – retained for completeness ------------------------
+// ---------------------------------------------------------------------------
+export const createProvider = (
+  providerId: CoreProvider | 'openrouter' | 'fal',
+  apiKey: string | 'internal'
+): Omit<ProviderV1, 'textEmbeddingModel'> => {
+  if (apiKey !== 'internal' && (!apiKey || apiKey.trim() === '')) {
+    throw new Error('API key is required for non-internal providers');
+  }
+
+  switch (providerId) {
+    case 'openai':
+      return createOpenAI({
+        apiKey: apiKey === 'internal' ? process.env.OPENAI_API_KEY : apiKey,
+        compatibility: 'strict',
+      });
+    case 'anthropic':
+      return createAnthropic({
+        apiKey: apiKey === 'internal' ? process.env.ANTHROPIC_API_KEY : apiKey,
+      });
+    case 'google':
+      return createGoogleGenerativeAI({
+        apiKey: apiKey === 'internal' ? process.env.GOOGLE_GENERATIVE_AI_API_KEY : apiKey,
+      });
+    case 'groq':
+      return createGroq({
+        apiKey: apiKey === 'internal' ? process.env.GROQ_API_KEY : apiKey,
+      });
+    case 'openrouter':
+      return createOpenRouter({
+        apiKey,
+      });
+    case 'fal':
+      return createFal({
+        apiKey: apiKey === 'internal' ? process.env.FAL_API_KEY : apiKey,
+      });
+    default: {
+      const exhaustiveCheck: never = providerId;
+      throw new Error(`Unknown provider: ${exhaustiveCheck}`);
+    }
+  }
 };

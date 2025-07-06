@@ -1,15 +1,24 @@
 import { v } from 'convex/values';
+import { AIMessage } from './message';
 
-// Thread schema for organizing conversations
 export const Thread = v.object({
-  userId: v.id('users'), // Reference to users table instead of Clerk ID string
+  authorId: v.string(),
   title: v.string(),
-  description: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
-  lastMessageAt: v.optional(v.number()),
-  messageCount: v.number(),
-  isArchived: v.optional(v.boolean()),
-  isPinned: v.optional(v.boolean()),
-  tags: v.optional(v.array(v.string())),
+  streamStartedAt: v.optional(v.number()),
+  isLive: v.optional(v.boolean()),
+  currentStreamId: v.optional(v.string()),
+  pinned: v.optional(v.boolean()),
+  projectId: v.optional(v.id('projects')),
+});
+
+export const SharedThread = v.object({
+  originalThreadId: v.id('threads'),
+  authorId: v.string(),
+  title: v.string(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  messages: v.array(AIMessage),
+  includeAttachments: v.boolean(),
 });

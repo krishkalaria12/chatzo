@@ -2,3 +2,5 @@
 export * from './message';
 export * from './thread';
 export * from './usage';
+export * from './settings';
+export * from './parts';

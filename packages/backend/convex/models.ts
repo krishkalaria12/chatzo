@@ -1,11 +1,11 @@
 import { httpAction } from './_generated/server';
-import { providerRegistry } from './providers/registry';
+import { getAllModels, DEFAULT_MODEL } from './config/models';
 
 // Get available models using provider registry
 export const getModels = httpAction(async (ctx, request) => {
   try {
-    const models = providerRegistry.getAllModels();
-    const defaultModel = 'gemini-2.5-flash';
+    const models = getAllModels();
+    const defaultModel = DEFAULT_MODEL;
 
     return new Response(JSON.stringify({ models, defaultModel }), {
       status: 200,
