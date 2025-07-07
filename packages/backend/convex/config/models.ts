@@ -1,11 +1,12 @@
 import { google } from '@ai-sdk/google';
 import { mistral } from '@ai-sdk/mistral';
 import { groq } from '@ai-sdk/groq';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { LanguageModel } from 'ai';
 
 export type ModelAbility = 'vision' | 'function_calling' | 'pdf' | 'reasoning' | 'effort_control';
 
-export const CoreProviders = ['google', 'mistral', 'groq'] as const;
+export const CoreProviders = ['google', 'mistral', 'groq', 'openrouter'] as const;
 export type CoreProvider = (typeof CoreProviders)[number];
 export type ModelDefinitionProviders = CoreProvider;
 
@@ -20,6 +21,11 @@ export type SharedModel<Abilities extends ModelAbility[] = ModelAbility[]> = {
 export const getModelById = (id: string) => MODELS_SHARED.find(m => m.id === id);
 
 export const getAllModels = () => MODELS_SHARED;
+
+// Initialize OpenRouter
+const openrouter = createOpenRouter({
+  apiKey: process.env.OPENROUTER_API_KEY || '',
+});
 
 export const MODELS_SHARED: SharedModel[] = [
   // Google Models
@@ -69,7 +75,7 @@ export const MODELS_SHARED: SharedModel[] = [
   // Groq Models
   {
     id: 'deepseek-r1-distill-llama-70b',
-    name: 'DeepSeek R1',
+    name: 'DeepSeek R1 (LLama Distilled)',
     provider: 'groq',
     abilities: ['reasoning', 'function_calling'],
   },
@@ -97,6 +103,13 @@ export const MODELS_SHARED: SharedModel[] = [
     provider: 'groq',
     abilities: ['reasoning', 'function_calling'],
   },
+  // OpenRouter Models
+  {
+    id: 'deepseek/deepseek-r1-0528:free',
+    name: 'DeepSeek R1 (OpenRouter)',
+    provider: 'openrouter',
+    abilities: ['reasoning', 'function_calling'],
+  },
 ] as const;
 
 /**
@@ -115,6 +128,8 @@ export const createAIModel = (modelKey: string, options?: any): LanguageModel =>
       return mistral(modelConfig.id, options);
     case 'groq':
       return groq(modelConfig.id, options);
+    case 'openrouter':
+      return openrouter.chat(modelConfig.id, options);
     default: {
       // Exhaustive check for TypeScript completeness
       throw new Error(`Unsupported provider: ${modelConfig.provider}`);
