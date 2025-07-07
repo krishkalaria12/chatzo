@@ -10,6 +10,7 @@ import {
   generateTitle,
   getThreads,
   updateThread,
+  searchThreads,
 } from './chat_http/routes/threads';
 import {
   getMessages,
@@ -116,6 +117,12 @@ http.route({
   path: '/api/chat/threads',
   method: 'GET',
   handler: getThreads,
+});
+
+http.route({
+  path: '/api/chat/threads/search',
+  method: 'GET',
+  handler: searchThreads,
 });
 
 // Handle thread messages: /api/chat/threads/<threadId>/messages

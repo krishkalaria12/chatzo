@@ -242,6 +242,35 @@ class ChatAPI {
   }
 
   /**
+   * Search user's threads
+   */
+  async searchThreads(
+    clerkId: string,
+    searchQuery: string,
+    limit: number = 20,
+    offset: number = 0,
+    archived: boolean = false
+  ): Promise<{ threads: Thread[]; total: number; pagination: any }> {
+    const params = new URLSearchParams({
+      clerkId,
+      q: searchQuery,
+      limit: limit.toString(),
+      offset: offset.toString(),
+      archived: archived.toString(),
+    });
+
+    const url = `${this.baseUrl}/api/chat/threads/search?${params}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to search threads');
+    }
+
+    return data;
+  }
+
+  /**
    * Get messages from a thread
    */
   async getThreadMessages(

@@ -5,10 +5,17 @@ export { NewChatButton } from './new-chat-button';
 export { ThreadItem } from './thread-item';
 export { EnhancedThreadList } from './enhanced-thread-list';
 export { SectionHeader } from './section-header';
+export { SearchInput } from './search-input';
 
 // State components
 export { EmptyThreadList } from './states/empty-thread-list';
 export { ErrorThreadList } from './states/error-thread-list';
+export {
+  SearchLoading,
+  SearchEmpty,
+  SearchError,
+  SearchResultsCount,
+} from './states/search-states';
 
 // Utilities
 export {

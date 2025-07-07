@@ -2,6 +2,7 @@ import { action, mutation, query } from '../_generated/server';
 import { v } from 'convex/values';
 import { getUserByClerkId } from './user_service';
 import { ConvexError } from 'convex/values';
+import { api } from '../_generated/api';
 
 /**
  * Generate title for a chat thread - with multimodal support (Cloudinary URLs only)
@@ -272,6 +273,103 @@ export const deleteThread = mutation({
       success: true,
       deletedThreadId: threadId,
       deletedMessagesCount: messages.length,
+    };
+  },
+});
+
+/**
+ * Search threads for a user
+ */
+export const searchUserThreads = query({
+  args: {
+    clerkId: v.string(),
+    searchQuery: v.string(),
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
+    archived: v.optional(v.boolean()),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    threads: any[];
+    total: number;
+    hasMore: boolean;
+  }> => {
+    const { clerkId, searchQuery, limit = 20, offset = 0, archived = false } = args;
+
+    // Get user by clerkId
+    const user = await getUserByClerkId(ctx, clerkId);
+
+    // If search query is empty, return empty results (not regular threads)
+    if (!searchQuery.trim()) {
+      return {
+        threads: [],
+        total: 0,
+        hasMore: false,
+      };
+    }
+
+    // Normalize search query for better matching
+    const normalizedQuery = searchQuery.toLowerCase().trim();
+    const searchTerms = normalizedQuery.split(/\s+/).filter(term => term.length > 0);
+
+    // Get all threads for the user first
+    let baseQuery = ctx.db
+      .query('threads')
+      .withIndex('by_user_updated', (q: any) => q.eq('userId', user._id))
+      .order('desc');
+
+    // Apply archived filter
+    if (archived === true) {
+      baseQuery = baseQuery.filter((q: any) => q.eq(q.field('isArchived'), true));
+    } else if (archived === false) {
+      baseQuery = baseQuery.filter((q: any) => q.neq(q.field('isArchived'), true));
+    }
+
+    // Get all threads (we'll filter in memory for complex search)
+    const allThreads = await baseQuery.collect();
+
+    // Filter threads based on search criteria
+    const filteredThreads = allThreads.filter((thread: any) => {
+      const title = thread.title?.toLowerCase() || '';
+      const description = thread.description?.toLowerCase() || '';
+
+      const titleMatch = title.includes(normalizedQuery);
+      const descriptionMatch = description.includes(normalizedQuery);
+
+      // Tag matching
+      const tagMatch =
+        thread.tags?.some((tag: string) => tag.toLowerCase().includes(normalizedQuery)) || false;
+
+      // Multi-term search (all terms must match at least one field)
+      const multiTermMatch =
+        searchTerms.length > 1
+          ? searchTerms.every(term => {
+              return (
+                title.includes(term) ||
+                description.includes(term) ||
+                (thread.tags?.map((tag: string) => tag.toLowerCase()).join(' ') || '').includes(
+                  term
+                )
+              );
+            })
+          : false;
+
+      const isMatch = titleMatch || descriptionMatch || tagMatch || multiTermMatch;
+
+      return isMatch;
+    });
+
+    // Apply pagination
+    const startIndex = offset;
+    const endIndex = offset + limit;
+    const paginatedThreads = filteredThreads.slice(startIndex, endIndex);
+
+    return {
+      threads: paginatedThreads,
+      total: filteredThreads.length,
+      hasMore: endIndex < filteredThreads.length,
     };
   },
 });

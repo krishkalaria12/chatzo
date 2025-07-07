@@ -8,29 +8,37 @@ import { useColorScheme } from '@/lib/use-color-scheme';
 import { CHATZO_COLORS } from '@/lib/constants';
 import { AppContainer } from '@/components/app-container';
 import { ConfirmationModal } from '@/components/ui/confirmation-modal';
+import { useSearchDebounce } from '@/lib/utils/debounce';
 
 import { AppHeader } from './app-header';
 import { NewChatButton } from './new-chat-button';
 import { EnhancedThreadList } from './enhanced-thread-list';
+import { SearchInput } from './search-input';
+import {
+  SearchLoading,
+  SearchEmpty,
+  SearchError,
+  SearchResultsCount,
+} from './states/search-states';
 
 interface DrawerContentProps extends DrawerContentComponentProps {}
 
-// Error boundary for the drawer content
+// Enhanced error boundary for drawer
 class DrawerErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback: React.ReactNode },
   { hasError: boolean }
 > {
-  constructor(props: any) {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError() {
+  static getDerivedStateFromError(): { hasError: boolean } {
     return { hasError: true };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Drawer Error:', error, errorInfo);
+    console.error('DrawerContent error:', error, errorInfo);
   }
 
   render() {
@@ -40,6 +48,16 @@ class DrawerErrorBoundary extends React.Component<
 
     return this.props.children;
   }
+}
+
+// Search state type
+interface SearchState {
+  query: string;
+  isSearching: boolean;
+  searchResults: Thread[];
+  searchError: string | null;
+  searchTotal: number;
+  hasSearched: boolean;
 }
 
 // Memoized drawer content component
@@ -53,11 +71,21 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     [isDarkColorScheme]
   );
 
-  // State management
+  // Regular threads state management
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Search state management
+  const [searchState, setSearchState] = useState<SearchState>({
+    query: '',
+    isSearching: false,
+    searchResults: [],
+    searchError: null,
+    searchTotal: 0,
+    hasSearched: false,
+  });
 
   // Delete confirmation modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -73,6 +101,124 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
 
   // Thread version for refreshing on new thread creation
   const version = useThreadVersion(state => state.version);
+
+  // Search function with proper error handling
+  const performSearch = useCallback(
+    async (query: string) => {
+      if (!user?.id || !query.trim()) {
+        setSearchState(prev => ({
+          ...prev,
+          isSearching: false,
+          searchResults: [],
+          searchError: null,
+          searchTotal: 0,
+          hasSearched: false,
+        }));
+        return;
+      }
+
+      try {
+        setSearchState(prev => ({
+          ...prev,
+          isSearching: true,
+          searchError: null,
+        }));
+
+        const result = await chatAPI.searchThreads(user.id, query.trim(), 50, 0, false);
+
+        setSearchState(prev => ({
+          ...prev,
+          isSearching: false,
+          searchResults: result.threads || [],
+          searchTotal: result.total || 0,
+          hasSearched: true,
+        }));
+      } catch (err) {
+        setSearchState(prev => ({
+          ...prev,
+          isSearching: false,
+          searchError: err instanceof Error ? err.message : 'Search failed',
+          searchResults: [],
+          searchTotal: 0,
+          hasSearched: true,
+        }));
+      }
+    },
+    [user?.id]
+  );
+
+  // Debounced search function - using a simpler approach for now
+  const debouncedSearchRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const debouncedSearch = React.useCallback(
+    (query: string) => {
+      // Clear existing timeout
+      if (debouncedSearchRef.current) {
+        clearTimeout(debouncedSearchRef.current);
+      }
+
+      // Set new timeout
+      debouncedSearchRef.current = setTimeout(() => {
+        performSearch(query);
+      }, 300);
+    },
+    [performSearch]
+  );
+
+  // Cancel function for cleanup
+  const cancelDebouncedSearch = React.useCallback(() => {
+    if (debouncedSearchRef.current) {
+      clearTimeout(debouncedSearchRef.current);
+      debouncedSearchRef.current = null;
+    }
+  }, []);
+
+  // Handle search query changes
+  const handleSearchQueryChange = useCallback(
+    (query: string) => {
+      setSearchState(prev => ({
+        ...prev,
+        query,
+      }));
+
+      const trimmedQuery = query.trim();
+      if (trimmedQuery.length > 0) {
+        debouncedSearch(trimmedQuery);
+      } else {
+        // Clear search results when query is empty
+        cancelDebouncedSearch();
+        setSearchState(prev => ({
+          ...prev,
+          isSearching: false,
+          searchResults: [],
+          searchError: null,
+          searchTotal: 0,
+          hasSearched: false,
+        }));
+      }
+    },
+    [debouncedSearch, cancelDebouncedSearch]
+  );
+
+  // Clear search
+  const handleClearSearch = useCallback(() => {
+    cancelDebouncedSearch();
+    setSearchState({
+      query: '',
+      isSearching: false,
+      searchResults: [],
+      searchError: null,
+      searchTotal: 0,
+      hasSearched: false,
+    });
+  }, [cancelDebouncedSearch]);
+
+  // Retry search
+  const handleRetrySearch = useCallback(() => {
+    if (searchState.query.trim()) {
+      performSearch(searchState.query);
+    }
+  }, [searchState.query, performSearch]);
 
   // Optimized load threads function with error handling
   const loadThreads = useCallback(
@@ -115,6 +261,13 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     loadThreads();
   }, [loadThreads, version]);
 
+  // Cleanup debounced search on unmount
+  useEffect(() => {
+    return () => {
+      cancelDebouncedSearch();
+    };
+  }, [cancelDebouncedSearch]);
+
   // Optimized callback handlers - wrapped in useCallback to prevent re-renders
   const handleNewChat = useCallback(() => {
     InteractionManager.runAfterInteractions(() => {
@@ -146,13 +299,15 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
   // Handle thread deletion
   const handleThreadDelete = useCallback(
     (threadId: string) => {
-      const thread = threads.find(t => t._id === threadId);
+      const thread =
+        threads.find(t => t._id === threadId) ||
+        searchState.searchResults.find(t => t._id === threadId);
       if (thread) {
         setThreadToDelete(thread);
         setShowDeleteModal(true);
       }
     },
-    [threads]
+    [threads, searchState.searchResults]
   );
 
   // Handle thread title editing
@@ -163,10 +318,17 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
       try {
         await chatAPI.updateThreadTitle(user.id, threadId, newTitle);
 
-        // Update thread in local state
+        // Update thread in both regular threads and search results
         setThreads(prev =>
           prev.map(t => (t._id === threadId ? { ...t, title: newTitle, updatedAt: Date.now() } : t))
         );
+
+        setSearchState(prev => ({
+          ...prev,
+          searchResults: prev.searchResults.map(t =>
+            t._id === threadId ? { ...t, title: newTitle, updatedAt: Date.now() } : t
+          ),
+        }));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to update thread title');
       }
@@ -181,8 +343,13 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
       setDeleteLoading(true);
       await chatAPI.deleteThread(user.id, threadToDelete._id);
 
-      // Remove thread from local state
+      // Remove thread from both regular threads and search results
       setThreads(prev => prev.filter(t => t._id !== threadToDelete._id));
+      setSearchState(prev => ({
+        ...prev,
+        searchResults: prev.searchResults.filter(t => t._id !== threadToDelete._id),
+        searchTotal: Math.max(0, prev.searchTotal - 1),
+      }));
 
       // If the deleted thread was currently active, navigate to home
       if (currentThreadId === threadToDelete._id) {
@@ -205,6 +372,77 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     setShowDeleteModal(false);
     setThreadToDelete(null);
   }, []);
+
+  // Determine what to display
+  const isSearchMode = searchState.query.trim().length > 0;
+  const threadsToShow = isSearchMode ? searchState.searchResults : threads;
+  const isLoadingToShow = isSearchMode ? searchState.isSearching : loading;
+  const errorToShow = isSearchMode ? searchState.searchError : error;
+
+  // Render search results or regular threads
+  const renderContent = () => {
+    if (isSearchMode) {
+      // Search mode
+      if (searchState.isSearching) {
+        return <SearchLoading query={searchState.query.trim()} />;
+      }
+
+      if (searchState.searchError) {
+        return (
+          <SearchError
+            query={searchState.query.trim()}
+            error={searchState.searchError}
+            onRetry={handleRetrySearch}
+            onClear={handleClearSearch}
+          />
+        );
+      }
+
+      if (searchState.hasSearched && searchState.searchResults.length === 0) {
+        return <SearchEmpty query={searchState.query.trim()} onClear={handleClearSearch} />;
+      }
+
+      if (searchState.searchResults.length > 0) {
+        // Show search results
+        return (
+          <View className='flex-1'>
+            <SearchResultsCount count={searchState.searchTotal} query={searchState.query.trim()} />
+            <EnhancedThreadList
+              threads={searchState.searchResults}
+              loading={false}
+              error={null}
+              currentThreadId={currentThreadId}
+              onThreadSelect={handleThreadSelect}
+              onThreadDelete={handleThreadDelete}
+              onThreadEdit={handleThreadEdit}
+              onRetry={handleRetrySearch}
+              onRefresh={handleRetrySearch}
+              refreshing={false}
+            />
+          </View>
+        );
+      }
+
+      // Fallback: show loading if in search mode but no results yet
+      return <SearchLoading query={searchState.query.trim()} />;
+    }
+
+    // Regular thread list mode
+    return (
+      <EnhancedThreadList
+        threads={threads}
+        loading={loading}
+        error={error}
+        currentThreadId={currentThreadId}
+        onThreadSelect={handleThreadSelect}
+        onThreadDelete={handleThreadDelete}
+        onThreadEdit={handleThreadEdit}
+        onRetry={handleRetry}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
+    );
+  };
 
   // Fallback component for error boundary
   const ErrorFallback = useMemo(
@@ -234,21 +472,19 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
           <NewChatButton onPress={handleNewChat} />
         </View>
 
-        {/* Thread List */}
-        <View className='flex-1'>
-          <EnhancedThreadList
-            threads={threads}
-            loading={loading}
-            error={error}
-            currentThreadId={currentThreadId}
-            onThreadSelect={handleThreadSelect}
-            onThreadDelete={handleThreadDelete}
-            onThreadEdit={handleThreadEdit}
-            onRetry={handleRetry}
-            onRefresh={handleRefresh}
-            refreshing={refreshing}
+        {/* Search Input */}
+        <View className='px-6 pb-4'>
+          <SearchInput
+            value={searchState.query}
+            onChangeText={handleSearchQueryChange}
+            onClear={handleClearSearch}
+            loading={searchState.isSearching}
+            placeholder='Search conversations...'
           />
         </View>
+
+        {/* Thread List or Search Results */}
+        <View className='flex-1'>{renderContent()}</View>
 
         {/* Delete Confirmation Modal */}
         <ConfirmationModal
