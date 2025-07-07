@@ -13,14 +13,10 @@ export type ModelDefinitionProviders = CoreProvider;
 export type SharedModel<Abilities extends ModelAbility[] = ModelAbility[]> = {
   id: string;
   name: string;
-  provider: ModelDefinitionProviders;
+  provider: CoreProvider;
   abilities: Abilities;
-  contextWindow?: number;
+  mode?: 'text' | 'image';
 };
-
-export const getModelById = (id: string) => MODELS_SHARED.find(m => m.id === id);
-
-export const getAllModels = () => MODELS_SHARED;
 
 // Initialize OpenRouter
 const openrouter = createOpenRouter({
@@ -112,6 +108,9 @@ export const MODELS_SHARED: SharedModel[] = [
   },
 ] as const;
 
+export const getModelById = (modelId: string) =>
+  MODELS_SHARED.find(model => model.id === modelId) || null;
+
 /**
  * Lightweight factory that returns a LanguageModel instance for a given model key.
  */
@@ -135,6 +134,17 @@ export const createAIModel = (modelKey: string, options?: any): LanguageModel =>
       throw new Error(`Unsupported provider: ${modelConfig.provider}`);
     }
   }
+};
+
+// Backwards-compatibility alias
+export const getModelConfig = getModelById;
+
+export const getAllModels = () => {
+  return MODELS_SHARED;
+};
+
+export const getModelsByProvider = (provider: CoreProvider) => {
+  return MODELS_SHARED.filter(model => model.provider === provider);
 };
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash';
