@@ -6,6 +6,7 @@ export { ThreadItem } from './thread-item';
 export { EnhancedThreadList } from './enhanced-thread-list';
 export { SectionHeader } from './section-header';
 export { SearchInput } from './search-input';
+export { SettingsButton } from './settings-button';
 
 // State components
 export { EmptyThreadList } from './states/empty-thread-list';

@@ -14,6 +14,7 @@ import { AppHeader } from './app-header';
 import { NewChatButton } from './new-chat-button';
 import { EnhancedThreadList } from './enhanced-thread-list';
 import { SearchInput } from './search-input';
+import { SettingsButton } from './settings-button';
 import {
   SearchLoading,
   SearchEmpty,
@@ -276,6 +277,13 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
     });
   }, [props.navigation]);
 
+  const handleSettingsPress = useCallback(() => {
+    InteractionManager.runAfterInteractions(() => {
+      props.navigation.navigate('settings');
+      props.navigation.closeDrawer();
+    });
+  }, [props.navigation]);
+
   const handleThreadSelect = useCallback(
     (thread: Thread) => {
       if (thread._id) {
@@ -481,6 +489,11 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
             loading={searchState.isSearching}
             placeholder='Search conversations...'
           />
+        </View>
+
+        {/* Settings Button */}
+        <View className='px-6 pb-4'>
+          <SettingsButton onPress={handleSettingsPress} />
         </View>
 
         {/* Thread List or Search Results */}

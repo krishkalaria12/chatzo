@@ -41,6 +41,14 @@ export default function HomeLayout() {
             drawerItemStyle: { display: 'none' },
           }}
         />
+
+        {/* Settings screen */}
+        <Drawer.Screen
+          name='settings'
+          options={{
+            drawerItemStyle: { display: 'none' }, // Hide from drawer navigation
+          }}
+        />
       </Drawer>
     </GestureHandlerRootView>
   );

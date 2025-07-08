@@ -387,7 +387,10 @@ class ChatAPI {
   ): Promise<{
     totalRequests: number;
     totalTokens: number;
+    period: string;
     dailyUsage: Array<{ date: string; requests: number; tokens: number }>;
+    averageRequestsPerDay: number;
+    averageTokensPerRequest: number;
   }> {
     const params = new URLSearchParams({
       clerkId,
@@ -417,6 +420,7 @@ class ChatAPI {
       requests: number;
       totalTokens: number;
       requestsPercentage: number;
+      averageTokensPerRequest: number;
     }>
   > {
     const params = new URLSearchParams({
