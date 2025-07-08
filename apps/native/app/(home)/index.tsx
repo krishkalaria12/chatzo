@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import {
   ScrollView,
   Text,
@@ -46,6 +47,11 @@ export default function HomePage() {
   const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+
+  // Track whether we should auto-scroll to the bottom when new messages arrive.
+  // The default behaviour is to auto-scroll, but if the user scrolls away from
+  // the bottom we temporarily disable it until they return to the bottom.
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   const lastHandledRef = useRef<string | undefined>(undefined);
 
@@ -173,14 +179,44 @@ export default function HomePage() {
     fetchModels();
   }, [user?.id, fetchModels]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive **only** if the user is
+  // currently at (or near) the bottom.  This prevents forcing the user back
+  // to the latest message when they intentionally scroll up to read earlier
+  // messages while a response is still streaming.
   useEffect(() => {
-    if (scrollViewRef.current && messages.length > 0) {
+    if (shouldAutoScroll && scrollViewRef.current && messages.length > 0) {
+      // Delay just a touch so that the list layout has updated.
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 50);
     }
-  }, [messages]);
+  }, [messages, shouldAutoScroll]);
+
+  /**
+   * Called on every scroll event.  We determine whether the user is close to
+   * the bottom of the list.  If they are, we enable auto-scroll so that new
+   * messages keep the view pinned to the bottom.  If they move further away
+   * (i.e. scroll up), we disable auto-scroll until they return.
+   */
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+
+      // How far from the bottom is the user currently?  We consider them "at
+      // bottom" if they are within this threshold so that slight jitter from
+      // momentum scrolling doesn’t flicker the state.
+      const bottomThreshold = 60; // px
+
+      const isAtBottom =
+        layoutMeasurement.height + contentOffset.y >= contentSize.height - bottomThreshold;
+
+      // Only update state when it actually changes to avoid useless re-renders.
+      if (isAtBottom !== shouldAutoScroll) {
+        setShouldAutoScroll(isAtBottom);
+      }
+    },
+    [shouldAutoScroll]
+  );
 
   // Load thread messages and set them in useChat
   const loadThreadMessages = async (threadId: string) => {
@@ -447,6 +483,8 @@ export default function HomePage() {
               className={cn('flex-1')}
               keyboardShouldPersistTaps='handled'
               showsVerticalScrollIndicator={false}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
               contentContainerStyle={{
                 flexGrow: 1,
                 paddingVertical: 12,
