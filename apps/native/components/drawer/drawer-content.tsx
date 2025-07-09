@@ -279,7 +279,7 @@ export const DrawerContent = React.memo<DrawerContentProps>(props => {
 
   const handleSettingsPress = useCallback(() => {
     InteractionManager.runAfterInteractions(() => {
-      props.navigation.navigate('settings');
+      props.navigation.navigate('(settings)');
       props.navigation.closeDrawer();
     });
   }, [props.navigation]);

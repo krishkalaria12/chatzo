@@ -10,7 +10,7 @@ import { useColorScheme } from '@/lib/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ButtonProps extends TouchableOpacityProps {
-  title: string;
+  title?: string;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
@@ -229,9 +229,14 @@ export function Button({
             />
           )}
 
-          <Text className={`font-semibold ${config.fontSize} ${getTextColor()}`} numberOfLines={1}>
-            {title}
-          </Text>
+          {title && (
+            <Text
+              className={`font-semibold ${config.fontSize} ${getTextColor()}`}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+          )}
 
           {rightIcon && (
             <Ionicons

@@ -42,9 +42,9 @@ export default function HomeLayout() {
           }}
         />
 
-        {/* Settings screen */}
+        {/* Settings screens */}
         <Drawer.Screen
-          name='settings'
+          name='(settings)'
           options={{
             drawerItemStyle: { display: 'none' }, // Hide from drawer navigation
           }}
