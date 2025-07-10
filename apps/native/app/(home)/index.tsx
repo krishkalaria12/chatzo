@@ -1,16 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
-import {
-  ScrollView,
-  Text,
-  View,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  TouchableWithoutFeedback,
-  Keyboard,
-} from 'react-native';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { Text, View, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { EnhancedFlashList } from '@/components/ui/enhanced-flash-list';
+import type { EnhancedFlashListRef } from '@/components/ui/enhanced-flash-list';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useChat } from '@ai-sdk/react';
@@ -21,7 +12,6 @@ import { SuggestedPrompts } from '@/components/ui/suggested-prompts';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { MessageRenderer } from '@/components/messages';
 import { TypingShimmer } from '@/components/ui/shimmer-text';
-import { AssistantMessageSkeleton, UserMessageSkeleton } from '@/components/messages/extra';
 import { useColorScheme } from '@/lib/use-color-scheme';
 import { chatAPI, Thread } from '@/lib/api/chat-api';
 import { generateConvexApiUrl } from '@/lib/convex-utils';
@@ -38,7 +28,7 @@ export default function HomePage() {
   const params = useLocalSearchParams();
   const newChat = (params as Record<string, string>).newChat;
   const threadParam = (params as Record<string, string>).id as string | undefined;
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<EnhancedFlashListRef>(null);
   const { isDarkColorScheme } = useColorScheme();
   const { bump } = useThreadVersion();
   const { fetchModels } = useModelsStore();
@@ -63,7 +53,10 @@ export default function HomePage() {
   }, [newChat]);
 
   // Use AI SDK's useChat hook with proper configuration
-  const { messages, isLoading, error, append, setMessages, stop } = useChat({
+  // The latest AI SDK returns a `status` string instead of the previous
+  // boolean `isLoading`. We still need a boolean throughout the component,
+  // so we derive it from the status value for backwards-compatibility.
+  const { messages, status, error, append, setMessages, stop } = useChat({
     fetch: expoFetch as unknown as typeof globalThis.fetch,
     api: generateConvexApiUrl('/api/chat/completions'),
     body: {
@@ -73,6 +66,8 @@ export default function HomePage() {
       generate_title: true,
       enabledTools: webSearchEnabled ? ['web_search'] : [],
       maxSteps: 5,
+      // Reduce UI updates while streaming so the JS thread stays responsive
+      experimental_throttle: 80, // ms
     },
     onError: error => {
       console.error('Chat error:', error);
@@ -144,6 +139,9 @@ export default function HomePage() {
     initialMessages: [],
   });
 
+  // Derive isStreaming via useMemo
+  const isLoading = useMemo(() => status === 'submitted' || status === 'streaming', [status]);
+
   // Sync user with Convex database
   const syncUserWithConvex = async () => {
     if (!user) return;
@@ -184,39 +182,14 @@ export default function HomePage() {
   // to the latest message when they intentionally scroll up to read earlier
   // messages while a response is still streaming.
   useEffect(() => {
-    if (shouldAutoScroll && scrollViewRef.current && messages.length > 0) {
-      // Delay just a touch so that the list layout has updated.
+    if (shouldAutoScroll && listRef.current && messages.length > 0) {
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        listRef.current?.scrollToIndex(messages.length - 1);
       }, 50);
     }
-  }, [messages, shouldAutoScroll]);
+  }, [messages.length, shouldAutoScroll]);
 
-  /**
-   * Called on every scroll event.  We determine whether the user is close to
-   * the bottom of the list.  If they are, we enable auto-scroll so that new
-   * messages keep the view pinned to the bottom.  If they move further away
-   * (i.e. scroll up), we disable auto-scroll until they return.
-   */
-  const handleScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-
-      // How far from the bottom is the user currently?  We consider them "at
-      // bottom" if they are within this threshold so that slight jitter from
-      // momentum scrolling doesn’t flicker the state.
-      const bottomThreshold = 60; // px
-
-      const isAtBottom =
-        layoutMeasurement.height + contentOffset.y >= contentSize.height - bottomThreshold;
-
-      // Only update state when it actually changes to avoid useless re-renders.
-      if (isAtBottom !== shouldAutoScroll) {
-        setShouldAutoScroll(isAtBottom);
-      }
-    },
-    [shouldAutoScroll]
-  );
+  // (scroll listener removed – FlashList handles it)
 
   // Load thread messages and set them in useChat
   const loadThreadMessages = async (threadId: string) => {
@@ -302,7 +275,7 @@ export default function HomePage() {
 
     await append({
       role: 'user',
-      content: messageContent as any,
+      content: messageContent as unknown as string,
     });
 
     if (shouldFetchThreadAfter && user?.id) {
@@ -373,7 +346,7 @@ export default function HomePage() {
       // Resend the message
       await append({
         role: 'user',
-        content: message.content,
+        content: message.content as unknown as string,
       });
     } catch (error) {
       console.error('Retry failed:', error);
@@ -476,96 +449,110 @@ export default function HomePage() {
             </View>
           </View>
 
-          {/* Scrollable Content Area */}
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <ScrollView
-              ref={scrollViewRef}
-              className={cn('flex-1')}
-              keyboardShouldPersistTaps='handled'
-              showsVerticalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              contentContainerStyle={{
-                flexGrow: 1,
-                paddingVertical: 12,
-              }}
-            >
-              {/* Show Suggested Prompts when no messages */}
-              {messages.length === 0 && !isLoadingMessages && !isLoading && (
-                <View className={cn('flex-1')}>
-                  <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
-                </View>
-              )}
+          {/* Show Suggested Prompts when no messages */}
+          {messages.length === 0 && !isLoadingMessages && !isLoading && (
+            <View className={cn('flex-1')}>
+              <SuggestedPrompts onPromptSelect={handleSendMessage} isVisible={true} />
+            </View>
+          )}
 
-              {/* Messages */}
-              {(messages.length > 0 || isLoadingMessages || isLoading) && (
-                <View className={cn('flex-1')}>
-                  {/* Loading indicator for initial message loading */}
-                  {isLoadingMessages && (
-                    <ScrollView
-                      contentContainerStyle={{
-                        paddingVertical: 12,
-                        flexGrow: 1,
-                        justifyContent: 'flex-start',
-                      }}
-                      showsVerticalScrollIndicator={false}
-                    >
-                      {Array.from({ length: 3 }).map((_, idx) => (
-                        <React.Fragment key={idx}>
-                          <AssistantMessageSkeleton />
-                          <UserMessageSkeleton />
-                        </React.Fragment>
-                      ))}
-                    </ScrollView>
-                  )}
-
-                  {/* Messages */}
-                  {messages.map((message, index) => (
+          {/* Messages */}
+          {(messages.length > 0 || isLoadingMessages || isLoading) && (
+            <View className={cn('flex-1')}>
+              {/* Loading indicator for initial message loading */}
+              {isLoadingMessages && (
+                <EnhancedFlashList
+                  data={Array.from({ length: 3 }).map((_, idx) => ({
+                    id: `skeleton-${idx}`,
+                    role: idx % 2 === 0 ? 'assistant' : 'user',
+                    content: '',
+                    createdAt: new Date(),
+                  }))}
+                  renderItem={({ item }) => (
                     <MessageRenderer
-                      key={`${message.id}-${index}`}
+                      key={item.id}
                       message={{
-                        id: message.id,
-                        role: message.role as 'user' | 'assistant' | 'system',
-                        content: message.content,
-                        createdAt: message.createdAt,
+                        id: item.id,
+                        role: item.role as 'user' | 'assistant' | 'system',
+                        content: item.content,
+                        createdAt: item.createdAt,
                       }}
                       onCopy={handleCopy}
                       onRetry={handleRetry}
                       onEdit={handleEdit}
                       isStreaming={isLoading}
-                      isLastMessage={index === messages.length - 1}
+                      isLastMessage={false} // No last message for skeletons
                     />
-                  ))}
-
-                  {/* Typing indicator */}
-                  {isLoading && (
-                    <View className={cn('items-start mb-4 px-4')}>
-                      <TypingShimmer visible={true} />
-                    </View>
                   )}
+                  keyExtractor={item => item.id}
+                  estimatedItemSize={120}
+                  contentContainerStyle={{
+                    paddingVertical: 12,
+                    flexGrow: 1,
+                    justifyContent: 'flex-start',
+                  }}
+                  showsVerticalScrollIndicator={false}
+                />
+              )}
+
+              {/* Messages */}
+              <EnhancedFlashList
+                ref={listRef}
+                data={messages}
+                renderItem={({ item, index }) => (
+                  <MessageRenderer
+                    key={item.id}
+                    message={{
+                      id: item.id,
+                      role: item.role as 'user' | 'assistant' | 'system',
+                      content: item.content,
+                      createdAt: item.createdAt,
+                    }}
+                    onCopy={handleCopy}
+                    onRetry={handleRetry}
+                    onEdit={handleEdit}
+                    isStreaming={isLoading}
+                    isLastMessage={index === messages.length - 1}
+                  />
+                )}
+                keyExtractor={item => item.id}
+                estimatedItemSize={120}
+                contentContainerStyle={{
+                  paddingVertical: 12,
+                  flexGrow: messages.length === 0 ? 1 : undefined,
+                }}
+                // Allow tap outside to dismiss keyboard
+                keyboardShouldPersistTaps='handled'
+                showsVerticalScrollIndicator={false}
+              />
+
+              {/* Typing indicator */}
+              {isLoading && (
+                <View className={cn('items-start mb-4 px-4')}>
+                  <TypingShimmer visible={true} />
                 </View>
               )}
-            </ScrollView>
-          </TouchableWithoutFeedback>
+            </View>
+          )}
+        </View>
 
-          {/* Input (remains fixed at the bottom) */}
-          <View
-            className={cn('bg-background border-t border-border')}
-            style={{
-              paddingTop: 8,
-            }}
-          >
-            <AutoResizingInput
-              onSend={handleSendMessage}
-              placeholder='Type your message...'
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-              isStreaming={isLoading}
-              onStop={stop}
-              webSearchEnabled={webSearchEnabled}
-              onWebSearchToggle={handleWebSearchToggle}
-            />
-          </View>
+        {/* Input (remains fixed at the bottom) */}
+        <View
+          className={cn('bg-background border-t border-border')}
+          style={{
+            paddingTop: 8,
+          }}
+        >
+          <AutoResizingInput
+            onSend={handleSendMessage}
+            placeholder='Type your message...'
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
+            isStreaming={isLoading}
+            onStop={stop}
+            webSearchEnabled={webSearchEnabled}
+            onWebSearchToggle={handleWebSearchToggle}
+          />
         </View>
       </KeyboardAvoidingView>
     </AppContainer>

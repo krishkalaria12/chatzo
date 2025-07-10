@@ -35,7 +35,7 @@ export const ShimmerText: React.FC<ShimmerTextProps> = ({
   const { isDarkColorScheme } = useColorScheme();
   const theme = isDarkColorScheme ? CHATZO_COLORS.dark : CHATZO_COLORS.light;
 
-  const [textWidth, setTextWidth] = useState(0);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   const translateX = useSharedValue(0);
 
@@ -44,17 +44,18 @@ export const ShimmerText: React.FC<ShimmerTextProps> = ({
   const _highlightColor = highlightColor || theme.primary;
 
   useEffect(() => {
-    if (textWidth === 0) return;
+    if (dimensions.width === 0) return;
     // Start shimmer animation
     translateX.value = withRepeat(
-      withTiming(textWidth, {
+      // Move full text width so the highlight sweeps through entirely.
+      withTiming(dimensions.width, {
         duration,
         easing: Easing.linear,
       }),
       -1,
       false
     );
-  }, [textWidth, duration, translateX]);
+  }, [dimensions.width, duration, translateX]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -67,7 +68,12 @@ export const ShimmerText: React.FC<ShimmerTextProps> = ({
       <MaskedView
         maskElement={
           <Text
-            onLayout={e => setTextWidth(e.nativeEvent.layout.width)}
+            onLayout={e =>
+              setDimensions({
+                width: e.nativeEvent.layout.width,
+                height: e.nativeEvent.layout.height,
+              })
+            }
             numberOfLines={1}
             className={cn('font-nunito')}
             style={[
@@ -86,14 +92,18 @@ export const ShimmerText: React.FC<ShimmerTextProps> = ({
         }
       >
         {/* Gradient that slides under the mask */}
-        {textWidth > 0 && (
+        {dimensions.width > 0 && (
           <Animated.View
-            style={[{
-              width: textWidth * 2, // twice the width for seamless loop
-              height: '100%',
-            }, animatedStyle]}
+            style={[
+              {
+                width: dimensions.width * 2, // twice the width for seamless loop
+                height: dimensions.height,
+              },
+              animatedStyle,
+            ]}
           >
             <LinearGradient
+              // Use a stronger highlight contrast for better visibility especially in light mode
               colors={[_baseColor, _highlightColor, _baseColor]}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
@@ -112,7 +122,7 @@ export const TypingShimmer: React.FC<{ visible?: boolean }> = ({ visible = true 
 
   return (
     <ShimmerText
-      text='Chatzo is thinking...'
+      text='Thinking...'
       className={cn('px-4 py-2')}
       textStyle={{
         fontSize: 14,
